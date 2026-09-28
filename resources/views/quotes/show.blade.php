@@ -1,0 +1,47 @@
+@extends('layouts.app')
+@section('title', 'Detalhes do orçamento')
+@section('content')
+@php
+    $status = data_get($quote, 'status', 'draft');
+    $statusLabels = ['draft' => 'Em edição', 'pending' => 'Aguardando aprovação', 'sent' => 'Enviado', 'approved' => 'Aprovado', 'rejected' => 'Recusado', 'expired' => 'Expirado'];
+    $statusClass = $status === 'approved' ? 'status-active' : (in_array($status, ['rejected', 'expired'], true) ? 'status-danger' : 'status-pending');
+    $versions = collect(data_get($quote, 'versions', []));
+    $currentVersion = $currentVersion ?? $versions->firstWhere('version_number', data_get($quote, 'current_version'));
+    if ($versions->isEmpty() && $currentVersion) $versions = collect([$currentVersion]);
+    $orders = collect(data_get($quote, 'productionOrders', data_get($quote, 'production_orders', [])));
+    if ($currentVersion) $orders = $orders->where('quote_version_id', data_get($currentVersion, 'id'))->values();
+    // A interface apenas formata os centavos persistidos no snapshot e não refaz o cálculo comercial.
+    $formatCents = static function ($cents) {
+        if ($cents === null) return 'Pendente';
+        $cents = (int) $cents;
+        return 'R$ '.number_format(intdiv($cents, 100), 0, ',', '.').','.str_pad((string) ($cents % 100), 2, '0', STR_PAD_LEFT);
+    };
+    $formatQuantity = static fn ($milli) => $milli === null ? '—' : number_format((int) $milli / 1000, 3, ',', '.');
+@endphp
+<a class="back-link" href="{{ route('quotes.index') }}">← Voltar para orçamentos</a>
+<div class="page-heading quote-detail-heading"><div><span class="eyebrow">{{ data_get($quote, 'number', 'ORÇAMENTO #'.data_get($quote, 'id')) }}</span><h1>{{ data_get($quote, 'number', 'Orçamento') }}</h1><p class="muted">{{ data_get($quote, 'customer.name', 'Cliente') }} · Criado {{ data_get($quote, 'created_at') ? data_get($quote, 'created_at')->format('d/m/Y') : '—' }}</p><span class="badge {{ $statusClass }}">{{ $statusLabels[$status] ?? ucfirst($status) }}</span></div><div class="quote-detail-actions">@if($status !== 'approved' && data_get($currentVersion, 'is_calculable'))<form method="POST" action="{{ route('quotes.approve', $quote) }}">@csrf<button type="submit" class="button primary">Aprovar e gerar O.S.<x-icon name="arrow"/></button></form>@elseif($status !== 'approved')<button type="button" class="button secondary" disabled aria-describedby="approval-blocked">Aprovação bloqueada</button>@endif</div></div>
+@include('partials.errors')
+@if($currentVersion && !data_get($currentVersion, 'is_calculable'))<div class="quote-alert quote-alert-warning" id="approval-blocked"><span class="quote-alert-icon">!</span><div><strong>Preço pendente de configuração</strong><p>Há custos ou consumos técnicos sem informação suficiente. Revise a ficha e os parâmetros antes de aprovar.</p></div></div>@endif
+<div class="quote-show-grid"><div class="quote-show-main">
+    <section class="card quote-summary-card"><div class="section-heading"><div><h2>Resumo da versão</h2><p class="muted">Versão {{ data_get($currentVersion, 'version_number', '—') }} · valores preservados no snapshot</p></div></div>
+        <dl class="quote-total-grid"><div><dt>Custo estimado</dt><dd>{{ $formatCents(data_get($currentVersion, 'cost_total_cents')) }}</dd></div><div><dt>Preço proposto</dt><dd class="quote-grand-total">{{ $formatCents(data_get($currentVersion, 'sale_total_cents')) }}</dd></div><div><dt>Perda aplicada</dt><dd>{{ data_get($currentVersion, 'snapshot.pricing.waste_basis_points') !== null ? number_format(data_get($currentVersion, 'snapshot.pricing.waste_basis_points') / 100, 2, ',', '.').'%' : 'Pendente' }}</dd></div><div><dt>Multiplicador</dt><dd>{{ data_get($currentVersion, 'snapshot.pricing.markup_multiplier_basis_points') !== null ? number_format(data_get($currentVersion, 'snapshot.pricing.markup_multiplier_basis_points') / 10000, 2, ',', '.') : 'Pendente' }}</dd></div></dl>
+        <div class="quote-line-items"><h3>Itens do orçamento</h3>
+            @forelse(data_get($currentVersion, 'items', []) as $line)
+                <article class="quote-line-item"><div><strong>{{ data_get($line, 'name', 'Produto') }}</strong><span>{{ $formatQuantity(data_get($line, 'quantity_milli')) }} {{ data_get($line, 'unit', '') }} · {{ data_get($line, 'production_sector', 'Produção') }}</span></div><strong>{{ $formatCents(data_get($line, 'sale_cents')) }}</strong>
+                    @if(count(data_get($line, 'answers', [])))<details class="quote-answer-details"><summary>Especificações do produto</summary><dl>@foreach(data_get($line, 'answers', []) as $answerKey => $answerValue)@php($answerText = is_array($answerValue) ? collect($answerValue)->map(fn ($value, $key) => strtoupper((string) $key).': '.$value)->implode(', ') : ((string) $answerValue === '1' ? 'Sim' : (((string) $answerValue === '0') ? 'Não' : (string) $answerValue)))<div><dt>{{ ucfirst(str_replace('_', ' ', $answerKey)) }}</dt><dd>{{ $answerText }}</dd></div>@endforeach</dl></details>@endif
+                    @if(count(data_get($line, 'components', [])))<ul class="quote-line-components">@foreach(data_get($line, 'components', []) as $component)<li><span>{{ data_get($component, 'name', 'Componente') }} · consumo {{ $formatQuantity(data_get($component, 'quantity_milli')) }} {{ data_get($component, 'unit', '') }}</span><span>{{ data_get($component, 'unit_cost_cents') === null ? 'Custo pendente' : $formatCents(data_get($component, 'cost_cents')) }}</span></li>@endforeach</ul>@endif
+                </article>
+            @empty<p class="quote-settings-empty">Esta versão não tem itens disponíveis.</p>@endforelse
+        </div>
+    </section>
+    <section class="card quote-orders-card"><div class="section-heading"><div><h2>Ordens de produção</h2><p class="muted">Uma ordem por setor envolvido, criada ao aprovar a versão.</p></div><span class="badge">{{ $orders->count() }} O.S.</span></div>
+        @forelse($orders as $order)<article class="quote-order-row"><span class="quote-order-icon"><x-icon name="orders"/></span><div><strong>{{ data_get($order, 'sector', 'Produção') }}</strong><span>{{ data_get($order, 'number', 'Ordem de produção') }} · {{ data_get($order, 'status', 'Aguardando início') }}</span></div></article>@empty<div class="quote-order-empty"><x-icon name="orders"/><p>A aprovação gera as ordens de produção por setor, de forma segura contra duplicidade.</p></div>@endforelse
+    </section>
+</div><aside class="quote-show-aside">
+    <section class="card quote-version-card"><div class="section-heading"><div><h2>Histórico de versões</h2><p class="muted">Cada revisão preserva custos e respostas do momento.</p></div></div><div class="quote-version-list">
+        @forelse($versions->sortByDesc(fn ($version) => data_get($version, 'version_number', 0)) as $version)<article class="quote-version-row"><span class="quote-version-mark">v{{ data_get($version, 'version_number', '—') }}</span><div><strong>{{ $formatCents(data_get($version, 'sale_total_cents')) }}</strong><span>{{ data_get($version, 'created_at') ? data_get($version, 'created_at')->format('d/m/Y H:i') : 'Versão salva' }}</span></div>@if(data_get($version, 'version_number') === data_get($quote, 'current_version'))<span class="badge status-active">Atual</span>@endif</article>@empty<p class="quote-settings-empty">Nenhuma versão registrada.</p>@endforelse
+    </div></section>
+    <section class="card quote-nesting-card"><div class="section-heading"><div><h2>Aproveitamento de material</h2><p class="muted">Estimativa retangular por grade, sem nesting irregular.</p></div></div><form method="POST" action="{{ route('quotes.nesting') }}" class="quote-nesting-form" data-nesting-form>@csrf<div class="field"><label for="nesting-type">Tipo de material</label><select id="nesting-type" name="material_type"><option value="sheet">Chapa</option><option value="roll">Bobina</option></select></div><div class="form-grid"><div class="field"><label for="piece-width">Largura da peça (mm)</label><input id="piece-width" name="piece_width_mm" type="number" min="1" max="10000" required></div><div class="field"><label for="piece-length">Comprimento da peça (mm)</label><input id="piece-length" name="piece_length_mm" type="number" min="1" max="10000" required></div><div class="field"><label for="material-width">Largura útil do material (mm)</label><input id="material-width" name="material_width_mm" type="number" min="1" max="10000" required></div><div class="field" data-sheet-length><label for="material-length">Comprimento da chapa (mm)</label><input id="material-length" name="material_length_mm" type="number" min="1" max="10000"></div><div class="field"><label for="nesting-quantity">Quantidade de peças</label><input id="nesting-quantity" name="quantity" type="number" min="1" max="100000" step="1" required></div><div class="field"><label for="nesting-gap">Folga entre peças (mm)</label><input id="nesting-gap" name="gap_mm" type="number" min="0" max="10000" value="0"></div></div><button class="button secondary" type="submit">Estimar aproveitamento</button><p class="field-hint" data-nesting-result role="status" aria-live="polite">Preencha as dimensões para ver uma estimativa geométrica.</p></form></section>
+    <section class="quote-snapshot-note"><span class="eyebrow">CONTROLE DE ALTERAÇÕES</span><p>Alterações em custos e respostas devem gerar uma nova versão. As versões anteriores continuam disponíveis para conferência.</p></section>
+</aside></div>
+@endsection

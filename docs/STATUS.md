@@ -1,27 +1,39 @@
 # Estado do projeto
 
 ## Etapa atual
-Fluxos implementados: organizacao, login, painel, clientes, catalogo e financeiro inicial. O servidor local esta disponivel em http://127.0.0.1:8000.
 
-## Decisoes
-- Sem Docker, conforme solicitacao. PHP 8.2 do XAMPP e MySQL local.
-- Laravel 12 compativel com PHP 8.2; atualizar PHP e Laravel em etapa de manutencao antes de producao. Suporte de seguranca do Laravel 12 ate 24/02/2027: https://laravel.com/docs/12.x/releases.
-- Blade e CSS responsivo; regras em actions para reaproveitamento na futura API.
-- Um usuario pertence a uma grafica nesta primeira etapa; papeis granulares e multiplos vinculos ficam no backlog.
-- O comando `php artisan printpro:create-owner` cria com prompt interativo um proprietario local sem expor senha em arquivos ou argumentos.
-- Comentarios explicam decisoes e regras em portugues. Revisao manual independente feita pelo Codex nesta etapa; Crivo estava indisponivel por limite de uso.
-- Repositorio remoto autorizado: https://github.com/Kaic-Developer/printPRO.git.
-- WhatsApp destinado ao atendimento de vendedores. Administrador conecta o numero da grafica; vendedores atendem numa caixa compartilhada. Dados tecnicos e administrativos nao sao enviados ao cliente final.
-- A ideia anterior de grupo de acompanhamento foi cancelada pelo usuario antes de autenticar. Processo interrompido e rascunho retirado do repositorio. Nenhum envio realizado.
+Fluxos implementados: organização, login, painel, clientes, catálogo comercial, financeiro inicial, catálogo técnico de orçamento, wizard, versões, aprovação e ordens de produção. O projeto continua local com Laravel 12, PHP 8.2 do XAMPP e MySQL, sem Docker.
 
-## Em andamento
-- Catalogo concluido nesta etapa: produtos com busca, filtro de situacao, unidades, preco opcional em centavos, edicao e ativacao/desativacao. Exclusao nao e oferecida.
-- Financeiro inicial implementado: lancamentos manuais de entradas e saidas, valores em centavos, filtro mensal, saldo do periodo e grafico baseado em dados reais.
-- Pagina de modulos criada para mostrar as entregas disponiveis e o roteiro futuro.
-- MySQL local: migracao financeira aplicada. A migracao de produtos segue pendente porque o MariaDB lista um arquivo products que nao existe no mecanismo InnoDB; nenhum arquivo de dados foi removido ou alterado.
-- Revisao independente do Crivo fica pendente ate o agente voltar a estar disponivel.
-- Criacao da conta inicial aguarda um e-mail valido: `kaic@developer@gmail.com` foi recusado pela validacao porque contem dois caracteres `@`. Nenhuma conta foi criada.
+## Decisões
 
-## Proximos modulos
-Orcamentos e aprovacao → pedidos e producao → atendimento compartilhado → relatorios integrados → contas a pagar/receber e conciliacao → API e acesso pelo celular.
-API autenticada para mobile, convites/papeis, recuperacao de senha com envio real e integracoes entram em etapas proprias.
+- Blade/CSS responsivo para web; actions e serviços compartilhados entre controladores web e a futura aplicação móvel.
+- O tenant sempre deriva do usuário autenticado. IDs de organização não são aceitos como fonte de autorização.
+- Valores monetários em centavos; custos, perda e markup não recebem valores fictícios.
+- O catálogo técnico global descreve categorias, materiais e processos. Cada gráfica controla ativação, custos e fatores comerciais.
+- API v1 usa tokens Bearer Sanctum com abilities e rotas separadas por escopo.
+- Comentários explicam em português regras de negócio, segurança e limites geométricos.
+- Repositório remoto autorizado: https://github.com/Kaic-Developer/printPRO.git.
+- WhatsApp é futuro canal de atendimento dos vendedores, sem compartilhar dados internos com clientes.
+- A conta inicial ainda precisa ser criada com e-mail válido: `kaic@developer@gmail.com` foi recusado porque contém dois caracteres `@`.
+
+## Entregas
+
+- Cadastro da gráfica e proprietário, login com limite de tentativas e logout.
+- Clientes e catálogo comercial isolados por organização.
+- Financeiro inicial com entradas/saídas, valores em centavos, filtro mensal e gráfico baseado em dados reais.
+- 167 presets iniciais para comunicação visual, gráfica rápida, têxtil/uniformes e brindes/rótulos, sem custos ou preços assumidos.
+- Ativação por organização, custo unitário informado pelo usuário, perda percentual e multiplicador de markup opcionais até configuração.
+- Wizard declarativo com múltiplas linhas, schema versionado, campos condicionais e grade têxtil.
+- Estimativa de nesting retangular para chapa e bobina, indicando orientação, consumo e aproveitamento; não é nesting ótimo.
+- Orçamentos com snapshots imutáveis, valores exatos em centavos, revisões e aprovação bloqueada quando faltam custos/fatores.
+- Aprovação gera ordens de produção por setor e a repetição do comando não duplica ordens.
+- API v1 para autenticação por token, catálogo, configuração, orçamento, nesting e ordens de produção.
+- Documentação funcional e contratos em [ORCAMENTOS.md](ORCAMENTOS.md).
+
+## Verificação e próximos passos
+
+- Os testes usam SQLite em memória e não devem executar `migrate:fresh` no banco local.
+- A migration aditiva de orçamentos foi aplicada no MySQL local e os presets foram sincronizados, sem resetar dados.
+- Validação concluída: `php artisan test` (44 testes), `npm run build`, `php artisan view:cache`, `git diff --check` e revisão cruzada.
+- A revisão identificou o consumo técnico configurável como limite conhecido: as dimensões de vários presets não viram material automaticamente até a gráfica cadastrar rendimento real. Fachada, banner e Polo já têm vínculo servidor-side das escolhas críticas aos componentes.
+- Pedidos com acompanhamento de chão de fábrica, atendimento compartilhado, relatórios integrados, contas a pagar/receber e aplicativo nativo continuam no roteiro.

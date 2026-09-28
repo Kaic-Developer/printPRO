@@ -11,6 +11,8 @@
 <a href="{{ route('dashboard') }}" @class(['nav-item', 'active' => request()->routeIs('dashboard')]) @if(request()->routeIs('dashboard')) aria-current="page" @endif><x-icon/>Visão geral</a>
 <a href="{{ route('customers.index') }}" @class(['nav-item', 'active' => request()->routeIs('customers.*')]) @if(request()->routeIs('customers.*')) aria-current="page" @endif><x-icon name="users"/>Clientes</a>
 <a href="{{ route('products.index') }}" @class(['nav-item', 'active' => request()->routeIs('products.*')]) @if(request()->routeIs('products.*')) aria-current="page" @endif><x-icon name="catalog"/>Catálogo</a>
+<a href="{{ route('quotes.index') }}" @class(['nav-item', 'active' => request()->routeIs('quotes.*')]) @if(request()->routeIs('quotes.*')) aria-current="page" @endif><x-icon name="quote"/>Orçamentos</a>
+<a href="{{ route('quote-settings.index') }}" @class(['nav-item', 'active' => request()->routeIs('quote-settings.*')]) @if(request()->routeIs('quote-settings.*')) aria-current="page" @endif><x-icon name="catalog"/>Catálogo técnico</a>
 <a href="{{ route('finance.index') }}" @class(['nav-item', 'active' => request()->routeIs('finance.*')]) @if(request()->routeIs('finance.*')) aria-current="page" @endif><x-icon name="chart"/>Financeiro</a>
 <a href="{{ route('modules.index') }}" @class(['nav-item', 'active' => request()->routeIs('modules.*')]) @if(request()->routeIs('modules.*')) aria-current="page" @endif><x-icon name="grid"/>Módulos</a>
 </nav>

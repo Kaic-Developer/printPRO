@@ -1,6 +1,6 @@
 # printPRO
 
-Sistema de gestão para gráficas, feito em Laravel. A base web responsiva entrega acesso da gráfica, painel, cadastro de clientes, catálogo de produtos e controle financeiro inicial. Uma API e um aplicativo móvel ficam para etapas futuras.
+Sistema de gestão para gráficas, feito em Laravel. A base web responsiva entrega acesso da gráfica, painel, clientes, catálogo comercial, financeiro inicial e orçamentos técnicos versionados. A API v1 autenticada prepara o domínio para um aplicativo móvel futuro; o aplicativo nativo ainda não existe.
 
 ## Iniciar no Windows com XAMPP
 
@@ -25,6 +25,11 @@ O `.env` contém a chave local e as credenciais do banco. Ele é privado e não 
 - Isolamento de clientes por gráfica e testes contra acesso por ID de outra organização.
 - Catálogo por gráfica com busca, filtro por situação, SKU exclusivo dentro de cada gráfica, unidade configurável e preço opcional armazenado em centavos.
 - Edição e ativação/desativação de produtos, preservando registros para uso futuro em orçamentos.
+- Biblioteca de presets para comunicação visual, gráfica, têxtil e brindes, com ativação e custos próprios por gráfica.
+- Wizard de orçamento com múltiplas linhas, grade de tamanhos, componentes sugeridos, versões imutáveis e cálculo em centavos.
+- Aprovação transacional que gera ordens de produção por setor sem duplicidade.
+- Estimativa retangular de aproveitamento para chapas e bobinas, sem presumir custos ou fatores comerciais.
+- API v1 com tokens Bearer Sanctum e escopos para catálogo, orçamentos e ordens de produção.
 - Controle financeiro inicial com lançamentos manuais de entradas e saídas, resumo mensal, filtro por período e gráfico com dados reais.
 - Máscara de reais nos valores financeiros, com armazenamento exato em centavos.
 - Página de módulos para consultar o que está disponível e o roteiro das próximas entregas.
@@ -45,4 +50,4 @@ O proprietário administra sua própria gráfica. O cadastro e o login iniciais 
 
 O WhatsApp será um canal de atendimento dos vendedores. A proposta inicial é o administrador conectar o número da gráfica e os vendedores atenderem numa caixa compartilhada. Conversas com clientes não devem revelar dados internos do painel, do desenvolvimento ou de outras gráficas. A integração ainda não foi implementada.
 
-Próxima etapa: orçamentos e aprovação; em seguida pedidos e produção, atendimento, relatórios integrados, contas a pagar/receber e acesso pelo celular. Consulte [docs/STATUS.md](docs/STATUS.md) e [docs/ATENDIMENTO.md](docs/ATENDIMENTO.md) para decisões e pendências.
+Consulte [docs/ORCAMENTOS.md](docs/ORCAMENTOS.md) para o contrato do wizard, cálculo, schemas e rotas. Consulte [docs/STATUS.md](docs/STATUS.md) e [docs/ATENDIMENTO.md](docs/ATENDIMENTO.md) para as demais decisões e pendências.

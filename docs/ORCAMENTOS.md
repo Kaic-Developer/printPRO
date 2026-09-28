@@ -1,0 +1,93 @@
+# Orçamentos inteligentes
+
+O módulo separa o catálogo técnico global da configuração de cada gráfica. O catálogo-base fica em `database/seeders/data/quote-preset-catalog.php`; ele descreve categorias, materiais, processos, produtos e campos do wizard, sem sugerir preços, custos, perdas ou markup. `QuotePresetSeeder` sincroniza os presets globais e cria as opções de cada organização sem sobrescrever escolhas existentes. Cadastros novos recebem a configuração inicial pelo fluxo de criação da gráfica.
+
+## Dados e isolamento
+
+- `quote_presets` guarda códigos estáveis, hierarquia, unidade, setor, componentes sugeridos e `wizard_schema` versionado. O schema descreve campos, opções e condições de exibição; ele nunca é executado como código.
+- `organization_quote_presets` controla ativação e custo unitário em centavos por organização. Campo de custo nulo significa desconhecido; custo zero só é aceito quando a gráfica o informa explicitamente.
+- `organization_quote_settings` guarda perda em pontos-base e multiplicador de markup em pontos-base. Ambos começam nulos.
+- `quotes` pertence à organização do usuário autenticado; cada `quote_versions` preserva um snapshot imutável de respostas, componentes, custos e fatores comerciais usados naquela proposta.
+- `quote_items` e `quote_item_components` guardam linhas e ficha técnica com nomes/unidades copiados, para que renomear um preset não altere documentos antigos.
+- `production_orders` copia as instruções relevantes de cada setor. A chave única `(quote_version_id, sector)` junto da transação torna a aprovação repetida idempotente.
+- `personal_access_tokens` é usado pelo Laravel Sanctum para a API móvel.
+
+Preços persistidos usam centavos inteiros. Quantidades aceitam até três casas decimais, guardadas em milésimos. O cálculo usa aritmética inteira com arredondamento half-up para centavos e rejeita estouro numérico. Uma linha sem custo unitário ou consumo informado pode ser salva como rascunho, mas o orçamento fica sem total vendável e não pode ser aprovado.
+
+## Cálculo comercial
+
+O total segue a regra solicitada, usando a soma do custo de todos os componentes selecionados:
+
+```text
+custo = Σ(arredondar(custo_unitário_centavos × consumo_milésimos / 1000))
+custo_com_perda = arredondar(custo × (10000 + perda_bp) / 10000)
+preço_final = arredondar(custo_com_perda × multiplicador_markup_bp / 10000)
+```
+
+O administrador precisa preencher os dois fatores. `perda_bp=500` representa perda de 5%; `markup_multiplier_bp=20000` representa multiplicador `2,00×`. Markup é multiplicador sobre custo, não margem bruta: por exemplo, `2,00×` sem perda corresponde a 50% de margem bruta antes das despesas operacionais. O sistema não afirma cobrir impostos, taxas ou despesas que não tenham sido modelados.
+
+O arredondamento por componente ocorre na linha de custo, e o preço final do orçamento é calculado sobre o custo global. Um eventual centavo de diferença entre a soma de preços por linha e o total global é ajustado na última linha para que os totais fechem.
+
+## API v1
+
+A API usa JSON, prefixo `/api/v1` e tokens Bearer do Sanctum. Os tokens são limitados a `catalog:read`, `catalog:write`, `quotes:read`, `quotes:write` e `production:read`; o token é exibido apenas no retorno da emissão. `organization_id` nunca é aceito no corpo da requisição.
+
+| Método e caminho | Escopo | Uso |
+|---|---|---|
+| `POST /auth/token` | público, limite 10/min | Emite token com `email`, `password`, `device_name` |
+| `DELETE /auth/token` | autenticado | Revoga o token usado |
+| `GET /quote-presets` | `catalog:read` | Taxonomia, presets habilitados, schemas, custos e fatores configurados |
+| `GET /quote-settings` | `catalog:read` | Mesmo catálogo com custos e parâmetros da gráfica |
+| `PATCH /quote-settings` | `catalog:write` | Atualiza `items[código][is_enabled,unit_cost]`, `waste_percentage`, `markup_multiplier` |
+| `GET /quotes` | `quotes:read` | Lista paginada da organização |
+| `POST /quotes` | `quotes:write` | Cria orçamento e versão 1 |
+| `GET /quotes/{id}` | `quotes:read` | Consulta versão, itens e ordens de produção da organização |
+| `POST /quotes/{id}/versions` | `quotes:write` | Cria nova versão enquanto o orçamento não estiver aprovado; exige `expected_version` para detectar edição concorrente |
+| `POST /quotes/{id}/approve` | `quotes:write` | Aprova e gera uma O.S. por setor |
+| `GET /production-orders` | `production:read` | Lista ordens paginadas, opcionalmente filtradas por setor/situação |
+| `POST /nesting-estimates` | `quotes:write` | Estima aproveitamento de chapa ou bobina |
+
+O corpo de criação contém uma lista de linhas. Códigos dos componentes devem pertencer às sugestões do preset selecionado; nenhum componente pode ser habilitado por um identificador de outra organização.
+
+```json
+{
+  "customer_id": 18,
+  "expires_at": "2026-10-15",
+  "items": [
+    {
+      "preset_code": "uniform-polo",
+      "answers": {
+        "size_grid": {"P": 4, "M": 8, "G": 8, "GG": 5},
+        "fabric": "piquet",
+        "personalization": "silk-screen",
+        "silk_front_colors": 2,
+        "silk_back_colors": 0
+      },
+      "components": [
+        {"code": "material-piquet", "selected": true, "quantity": "1,2"},
+        {"code": "process-silk-screen", "selected": true, "quantity": "0,08"}
+      ]
+    }
+  ]
+}
+```
+
+`size_grid` determina a quantidade da linha pela soma das grades; nos demais casos `quantity` é obrigatória. `components[].quantity` informa consumo **por unidade produzida** na unidade cadastrada para cada componente (por exemplo, rolo, folha, m² ou hora). O sistema multiplica esse valor pela quantidade da linha e guarda consumo unitário e total; não presume conversões nem rendimento. Campo condicional invisível não persiste no snapshot.
+
+As regras críticas já relacionam escolhas de fachada, mídia frontlight e camisa polo aos componentes correspondentes e rejeitam combinações incompatíveis. Para outros presets, o consumo segue informado pelo operador até que a gráfica configure rendimentos/fichas técnicas reais; dimensões informativas não são convertidas automaticamente em material ou custo.
+
+## Wizard e nesting
+
+Os schemas são declarativos (`version`, `fields`, `type`, `options`, `visible_when`) e validados novamente no servidor contra o preset armazenado. Tipos suportados: `boolean`, `decimal`, `integer`, `text`, `select`, `multiselect` e `size_grid`.
+
+O estimador aceita dimensões inteiras em milímetros e testa duas grades retangulares, com e sem rotação. Em chapa, informa folhas necessárias, aproveitamento e área descartada. Em bobina, estima comprimento a consumir pela largura e orientação escolhida. Não faz nesting irregular/ótimo, não calcula sangria fora do campo de espaçamento e não inventa dimensão de mídia; o retorno deve ser tratado como estimativa.
+
+## Executar e validar
+
+```powershell
+php artisan migrate
+php artisan db:seed --class="Database\Seeders\QuotePresetSeeder"
+php artisan test
+```
+
+Não use `migrate:fresh` no banco local. Testes usam SQLite em memória.

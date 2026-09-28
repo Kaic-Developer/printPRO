@@ -41,7 +41,7 @@ class FinanceModuleTest extends TestCase
         $this->assertSame(123456, $entry->amount_cents);
         $this->assertSame('R$ 1.234,56', $entry->formatted_amount);
         $this->get('/finance')->assertOk()->assertViewHas('incomeCents', 123456)->assertViewHas('expenseCents', 0);
-        $this->get('/modules')->assertOk()->assertSee('Orçamentos e aprovação')->assertSee('Relatórios');
+        $this->get('/modules')->assertOk()->assertSee('Wizard por produto')->assertSee('Relatórios');
     }
 
     public function test_expenses_are_subtracted_and_monthly_chart_uses_real_values(): void
