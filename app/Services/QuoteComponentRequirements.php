@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\QuotePreset;
+use Illuminate\Validation\ValidationException;
 
 /** Liga escolhas críticas do wizard à ficha técnica sem presumir rendimento. */
 final class QuoteComponentRequirements
@@ -13,6 +14,8 @@ final class QuoteComponentRequirements
             'sign-facade' => $this->facade($answers),
             'product-frontlight-banner' => $this->banner($answers),
             'uniform-polo' => $this->polo($answers),
+            'print-business-card' => $this->businessCard($answers),
+            'product-presentation-folder' => $this->presentationFolder($answers),
             default => [],
         };
 
@@ -32,8 +35,58 @@ final class QuoteComponentRequirements
             'requires_scaffold' => 'third-party-scaffold', 'height_installation' => 'process-installation-height',
             'cnc_outsourced' => 'third-party-cnc', 'galvanizing_outsourced' => 'third-party-galvanizing',
         ] as $field => $code) {
-            if (($answers[$field] ?? false) === true) $required[] = $code;
+            if ($this->isTrue($answers[$field] ?? false)) $required[] = $code;
         }
+        return $required;
+    }
+
+    /** Vincula substrato, processo e acabamentos selecionados aos componentes precificáveis. */
+    private function businessCard(array $answers): array
+    {
+        $selectedFinishes = (array) ($answers['finishes'] ?? []);
+        if (in_array('matte', $selectedFinishes, true) && in_array('soft-touch', $selectedFinishes, true)) {
+            throw ValidationException::withMessages(['answers.finishes' => 'Escolha laminação fosca ou soft touch, não as duas.']);
+        }
+
+        $stock = match ($answers['stock'] ?? '') {
+            'couche-250g' => 'material-cardstock-250g',
+            'couche-300g' => 'material-cardstock-300g',
+            'pvc-075' => 'material-card-pvc-075',
+            default => '',
+        };
+        $finishes = [];
+        foreach ($selectedFinishes as $finish) {
+            $code = match ($finish) {
+                'matte', 'soft-touch' => 'finish-card-lamination',
+                'uv-varnish' => 'finish-uv-varnish',
+                'hot-stamping' => 'finish-hot-stamping',
+                'rounded-corners' => 'finish-rounded-corners',
+                default => '',
+            };
+            if ($code !== '') $finishes[] = $code;
+        }
+        if ($this->isTrue($answers['special_die'] ?? false)) $finishes[] = 'process-special-die';
+
+        return [$stock, 'process-sheet-print', ...$finishes];
+    }
+
+    /** Uma pasta depende do estoque escolhido e dos acabamentos efetivamente marcados. */
+    private function presentationFolder(array $answers): array
+    {
+        $stock = match ($answers['stock'] ?? '') {
+            'couche-300g' => 'material-couche-300g',
+            'offset-90g' => 'material-offset-90g',
+            default => '',
+        };
+        if ($this->isTrue($answers['pocket_ear'] ?? false) && ! $this->isTrue($answers['pocket'] ?? false)) {
+            throw ValidationException::withMessages(['answers.pocket_ear' => 'A orelha só pode ser incluída junto com a bolsa da pasta.']);
+        }
+
+        $required = [$stock, 'process-sheet-print'];
+        if ($this->isTrue($answers['pocket'] ?? false)) $required[] = 'finish-folder-pocket';
+        if ($this->isTrue($answers['die_cut'] ?? false)) $required[] = 'process-die-cut-crease';
+        if ($this->isTrue($answers['lamination'] ?? false)) $required[] = 'finish-card-lamination';
+
         return $required;
     }
 
@@ -59,5 +112,10 @@ final class QuoteComponentRequirements
             'textile-vinyl' => ['process-textile-vinyl', 'material-textile-vinyl'], default => [],
         };
         return [$fabric, ...$process];
+    }
+
+    private function isTrue(mixed $value): bool
+    {
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN);
     }
 }

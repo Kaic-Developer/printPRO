@@ -74,7 +74,7 @@ O corpo de criação contém uma lista de linhas. Códigos dos componentes devem
 
 `size_grid` determina a quantidade da linha pela soma das grades; nos demais casos `quantity` é obrigatória. `components[].quantity` informa consumo **por unidade produzida** na unidade cadastrada para cada componente (por exemplo, rolo, folha, m² ou hora). O sistema multiplica esse valor pela quantidade da linha e guarda consumo unitário e total; não presume conversões nem rendimento. Campo condicional invisível não persiste no snapshot.
 
-As regras críticas já relacionam escolhas de fachada, mídia frontlight e camisa polo aos componentes correspondentes e rejeitam combinações incompatíveis. Para outros presets, o consumo segue informado pelo operador até que a gráfica configure rendimentos/fichas técnicas reais; dimensões informativas não são convertidas automaticamente em material ou custo.
+As regras críticas relacionam fachada, mídia frontlight, camisa polo, cartão e pasta aos componentes correspondentes às respostas do wizard. Acabamentos marcados, corte especial e taxas de terceiros selecionadas não podem ser omitidos da ficha de custo; a orelha da pasta exige que a bolsa também esteja selecionada. Para os demais presets, o consumo segue informado pelo operador até que a gráfica configure rendimentos/fichas técnicas reais; dimensões informativas não são convertidas automaticamente em material ou custo.
 
 ## Wizard e nesting
 

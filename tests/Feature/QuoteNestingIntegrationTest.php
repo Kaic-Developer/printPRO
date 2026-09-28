@@ -320,4 +320,71 @@ class QuoteNestingIntegrationTest extends TestCase
         $this->actingAs($unsupportedUser)->postJson('/quotes', $payload)->assertUnprocessable();
         $this->assertDatabaseCount('quotes', 0);
     }
+
+    public function test_printed_card_and_folder_answers_require_matching_stock_and_selected_finishes(): void
+    {
+        $card = $this->fixture('print-business-card');
+        [$cardUser] = $card;
+        $wrongStock = $this->payload($card, '4', 4, [
+            'material_type' => 'sheet', 'piece_width_mm' => 90, 'piece_length_mm' => 50,
+            'material_width_mm' => 1000, 'material_length_mm' => 1000,
+        ], ['width_mm' => '90', 'height_mm' => '50', 'stock' => 'couche-250g']);
+        $this->actingAs($cardUser)->postJson('/quotes', $wrongStock)->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
+
+        $conflictingLamination = $this->payload($card, '4', 4, [
+            'material_type' => 'sheet', 'piece_width_mm' => 90, 'piece_length_mm' => 50,
+            'material_width_mm' => 1000, 'material_length_mm' => 1000,
+        ], ['width_mm' => '90', 'height_mm' => '50', 'finishes' => ['matte', 'soft-touch']]);
+        unset($conflictingLamination['items'][0]['nesting']);
+        $this->postJson('/quotes', $conflictingLamination)->assertUnprocessable()->assertJsonValidationErrors('answers.finishes');
+
+        $missingFinishes = $this->payload($card, '4', 4, [
+            'material_type' => 'sheet', 'piece_width_mm' => 90, 'piece_length_mm' => 50,
+            'material_width_mm' => 1000, 'material_length_mm' => 1000,
+        ], ['width_mm' => '90', 'height_mm' => '50', 'finishes' => ['matte', 'uv-varnish'], 'special_die' => '1']);
+        unset($missingFinishes['items'][0]['nesting']);
+        $this->postJson('/quotes', $missingFinishes)->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
+
+        $folder = $this->fixture('product-presentation-folder');
+        [$folderUser] = $folder;
+        $wrongFolderStock = $this->payload($folder, '4', 4, [
+            'material_type' => 'sheet', 'piece_width_mm' => 400, 'piece_length_mm' => 300,
+            'material_width_mm' => 1000, 'material_length_mm' => 1000,
+        ], ['quantity' => '4', 'open_width_mm' => '400', 'open_height_mm' => '300', 'closed_width_mm' => '200', 'closed_height_mm' => '150', 'stock' => 'offset-90g']);
+        unset($wrongFolderStock['items'][0]['nesting']);
+        $this->actingAs($folderUser)->postJson('/quotes', $wrongFolderStock)->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
+
+        $invalidPocket = $this->payload($folder, '4', 4, [
+            'material_type' => 'sheet', 'piece_width_mm' => 400, 'piece_length_mm' => 300,
+            'material_width_mm' => 1000, 'material_length_mm' => 1000,
+        ], ['quantity' => '4', 'open_width_mm' => '400', 'open_height_mm' => '300', 'closed_width_mm' => '200', 'closed_height_mm' => '150', 'pocket' => '0', 'pocket_ear' => '1']);
+        unset($invalidPocket['items'][0]['nesting']);
+        $this->postJson('/quotes', $invalidPocket)->assertUnprocessable()->assertJsonValidationErrors('answers.pocket_ear');
+    }
+
+    public function test_checked_facade_third_party_option_cannot_be_omitted_from_the_cost_sheet(): void
+    {
+        $fixture = $this->fixture('sign-facade');
+        [$user, $product, $acm, $welding] = $fixture;
+        $tube = QuotePreset::query()->where('code', 'material-metal-tube-20x20')->firstOrFail();
+        $payload = ['items' => [[
+            'preset_code' => $product->code,
+            'quantity' => '0.125',
+            'answers' => [
+                'width_m' => '0.5', 'height_m' => '0.25', 'structure_tube' => '20x20',
+                'reinforcement' => '0', 'anti_rust_paint' => '0', 'acm_thickness' => '3mm',
+                'lighting' => 'none', 'requires_munk' => '1', 'requires_scaffold' => '0',
+                'height_installation' => '0', 'cnc_outsourced' => '0', 'galvanizing_outsourced' => '0',
+            ],
+            'components' => [
+                ['code' => $acm->code, 'selected' => true, 'quantity' => '1'],
+                ['code' => $tube->code, 'selected' => true, 'quantity' => '1'],
+                ['code' => $welding->code, 'selected' => true, 'quantity' => '1'],
+            ],
+        ]]];
+
+        $this->actingAs($user)->postJson('/quotes', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('items.0.components');
+    }
 }
