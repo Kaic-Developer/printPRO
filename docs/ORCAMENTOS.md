@@ -82,6 +82,8 @@ Uniforme profissional, moletom, avental, boné e camiseta básica vinculam a bas
 
 O cálculo de área por formato A4/A3/A2 ou medidas personalizadas também cobre polo, moletom, avental e a aplicação avulsa DTF/DTG. O wizard pergunta o número de estampas por peça nos produtos por grade; as dimensões customizadas só aparecem e são exigidas quando a opção “Área personalizada” está ativa. Cada posição é arredondada para cima aos milésimos de m² e multiplicada pela quantidade produzida. Para DTF, impressão e filme transfer acompanham a área calculada; para DTG, somente o processo é automático e a tinta continua com consumo manual por variar conforme o perfil de impressão.
 
+Rótulos agora podem usar a estimativa integrada de bobina ou cartela: o formato selecionado determina o material esperado, e largura/altura da etiqueta são reconciliadas no servidor com a grade. A bobina calcula automaticamente a orientação que consome menos comprimento entre as duas grades retangulares testadas; essa estimativa pressupõe que a arte possa girar, então o sentido de saída deve ser confirmado com a produção. Folhas cobram o número inteiro de chapas necessárias segundo as dimensões reais cadastradas pela gráfica.
+
 ## Wizard e nesting
 
 Os schemas são declarativos (`version`, `fields`, `type`, `options`, `visible_when`) e validados novamente no servidor contra o preset armazenado. Tipos suportados: `boolean`, `decimal`, `integer`, `text`, `select`, `multiselect` e `size_grid`.

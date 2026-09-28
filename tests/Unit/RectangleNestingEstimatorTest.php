@@ -58,13 +58,13 @@ final class RectangleNestingEstimatorTest extends TestCase
         ]);
 
         self::assertTrue($result['fits']);
-        self::assertSame(3, $result['pieces_per_row']);
-        self::assertSame(2_100, $result['roll_length_mm']);
-        self::assertSame(700, $result['placed_length_mm']);
-        self::assertSame(3_192_000, $result['consumed_area_mm2']);
+        self::assertSame(2, $result['pieces_per_row']);
+        self::assertSame(2_000, $result['roll_length_mm']);
+        self::assertSame(500, $result['placed_length_mm']);
+        self::assertSame(3_040_000, $result['consumed_area_mm2']);
     }
 
-    public function test_roll_rotates_when_that_places_more_items_across_web(): void
+    public function test_roll_keeps_orientation_when_it_consumes_less_than_more_across_rotation(): void
     {
         $result = (new RectangleNestingEstimator)->estimate([
             'material_type' => 'roll',
@@ -72,6 +72,21 @@ final class RectangleNestingEstimatorTest extends TestCase
             'piece_length_mm' => 500,
             'material_width_mm' => 1520,
             'quantity' => 4,
+        ]);
+
+        self::assertSame('original', $result['orientation']);
+        self::assertSame(2, $result['pieces_per_row']);
+        self::assertSame(1_000, $result['roll_length_mm']);
+    }
+
+    public function test_roll_rotates_when_it_reduces_total_consumed_length_for_large_quantity(): void
+    {
+        $result = (new RectangleNestingEstimator)->estimate([
+            'material_type' => 'roll',
+            'piece_width_mm' => 700,
+            'piece_length_mm' => 500,
+            'material_width_mm' => 1520,
+            'quantity' => 6,
         ]);
 
         self::assertSame('rotated', $result['orientation']);
@@ -90,9 +105,10 @@ final class RectangleNestingEstimatorTest extends TestCase
             'gap_mm' => 20,
         ]);
 
+        self::assertSame('rotated', $result['orientation']);
         self::assertSame(2, $result['pieces_per_row']);
-        self::assertSame(1420, $result['roll_length_mm']);
-        self::assertSame(2_158_400, $result['consumed_area_mm2']);
+        self::assertSame(1020, $result['roll_length_mm']);
+        self::assertSame(1_550_400, $result['consumed_area_mm2']);
     }
 
     public function test_reports_when_piece_cannot_fit_in_either_sheet_orientation(): void

@@ -218,6 +218,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             'print-business-card': ['width_mm', 'height_mm', 1],
             'product-acrylic-cutout': ['width_mm', 'height_mm', 1],
             'product-presentation-folder': ['open_width_mm', 'open_height_mm', 1],
+            'product-labels-roll-sheet': ['width_mm', 'height_mm', 1],
         };
         const mapping = keyMap[productCode];
         if (!mapping) return;
@@ -241,6 +242,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             'product-printed-adhesive': { key: 'material', values: { monomeric: 'material-vinyl-monomeric', polymeric: 'material-vinyl-polymeric', perforated: 'material-vinyl-perforated', frosted: 'material-vinyl-frosted', 'static-cling': 'material-vinyl-static-cling' } },
             'print-business-card': { key: 'stock', values: { 'couche-250g': 'material-cardstock-250g', 'couche-300g': 'material-cardstock-300g', 'pvc-075': 'material-card-pvc-075' } },
             'product-presentation-folder': { key: 'stock', values: { 'couche-300g': 'material-couche-300g' } },
+            'product-labels-roll-sheet': { key: 'format', values: { roll: 'material-label-roll-stock', sheet: 'material-label-sheet-stock' } },
             'product-acrylic-cutout': { key: 'plastic_type', values: { 'acrylic-crystal': 'material-acrylic-sheet', 'acrylic-color': 'material-acrylic-sheet', ps: 'material-ps-sheet', 'expanded-pvc': 'material-expanded-pvc-sheet', polycarbonate: 'material-polycarbonate-sheet' } },
         }[productCode];
         let allowedCode = schema ? schema.values[answer(schema.key)] : null;
@@ -343,7 +345,8 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 ? `${estimate.sheets_required} chapa(s), com ${estimate.pieces_per_sheet} peça(s) por chapa`
                 : `${estimate.roll_length_mm} mm de bobina, com ${estimate.pieces_per_row} peça(s) na largura`;
             const utilization = (estimate.utilization_basis_points / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            result.textContent = `Estimativa: ${stock}. Aproveitamento de área: ${utilization}%. Grade retangular simplificada; confirme o corte com a produção.`;
+            const orientation = estimate.orientation === 'rotated' ? 'peças giradas' : 'orientação original';
+            result.textContent = `Estimativa: ${stock}, ${orientation}. Aproveitamento de área: ${utilization}%. A orientação é automática e supõe que a arte pode girar; confirme o sentido e o corte com a produção.`;
         } catch (error) {
             if (isCurrentRequest()) result.textContent = error.message || 'Não foi possível concluir a estimativa.';
         }

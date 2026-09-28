@@ -448,6 +448,12 @@ class BuildQuoteVersion
         if ($materialCode !== $expectedMaterial) {
             throw ValidationException::withMessages(["{$path}.material_code" => 'O material do nesting não corresponde ao material escolhido na ficha do produto.']);
         }
+        $expectedMaterialType = $product->code === 'product-labels-roll-sheet'
+            ? match ($answers['format'] ?? null) { 'roll' => 'roll', 'sheet' => 'sheet', default => null }
+            : null;
+        if ($expectedMaterialType !== null && $materialType !== $expectedMaterialType) {
+            throw ValidationException::withMessages(["{$path}.material_type" => 'O tipo de nesting deve corresponder à apresentação em bobina ou cartela escolhida no produto.']);
+        }
         if (! is_int($quantity) && !(is_string($quantity) && preg_match('/\A\d{1,6}\z/', $quantity))) {
             throw ValidationException::withMessages(["{$path}.quantity" => 'Informe um número inteiro de peças para o nesting.']);
         }
@@ -589,6 +595,7 @@ class BuildQuoteVersion
             'sign-facade', 'product-frontlight-banner', 'product-printed-adhesive' => ['width_m', 'height_m', 'meter'],
             'print-business-card', 'product-acrylic-cutout' => ['width_mm', 'height_mm', 'millimeter'],
             'product-presentation-folder' => ['open_width_mm', 'open_height_mm', 'millimeter'],
+            'product-labels-roll-sheet' => ['width_mm', 'height_mm', 'millimeter'],
             default => [null, null, null],
         };
         if ($widthKey === null || $heightKey === null) return null;
@@ -615,6 +622,9 @@ class BuildQuoteVersion
                 'couche-250g' => 'material-cardstock-250g', 'couche-300g' => 'material-cardstock-300g', 'pvc-075' => 'material-card-pvc-075', default => null,
             },
             'product-presentation-folder' => match ($answers['stock'] ?? null) { 'couche-300g' => 'material-couche-300g', default => null },
+            'product-labels-roll-sheet' => match ($answers['format'] ?? null) {
+                'roll' => 'material-label-roll-stock', 'sheet' => 'material-label-sheet-stock', default => null,
+            },
             'product-acrylic-cutout' => match ($answers['plastic_type'] ?? null) {
                 'acrylic-crystal', 'acrylic-color' => match ((string) ($answers['thickness_mm'] ?? '')) {
                     '2' => 'material-acrylic-cast-2mm', '3' => 'material-acrylic-cast-3mm', '4' => 'material-acrylic-cast-4mm',

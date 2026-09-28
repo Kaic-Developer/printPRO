@@ -34,6 +34,6 @@ Fluxos implementados: organização, login, painel, clientes, catálogo comercia
 
 - Os testes usam SQLite em memória e não devem executar `migrate:fresh` no banco local.
 - Migrations `2026_09_28_000004` e `2026_09_28_000005` aplicadas ao MySQL local; os presets foram sincronizados sem resetar dados. A migration 005 armazena dimensões nominais por material e organização.
-- Validação concluída: `php artisan test --compact` (60 testes, 422 assertions), `npm.cmd run build`, `php artisan view:cache`, `git diff --check` e revisão cruzada de domínio e UX.
-- O nesting integrado está limitado aos produtos com resposta dimensional e material vinculados no servidor. Para outros produtos, a ficha técnica ainda exige que a gráfica informe o consumo real; valores ausentes bloqueiam o preço e aprovação.
+- Última validação: `php artisan test` (85 testes, 586 assertions), `npm.cmd run build`, `php artisan view:cache`, `git diff --check` e revisão cruzada de domínio.
+- O nesting integrado cobre fachada, grandes formatos, adesivo, cartão, pasta, acrílico/plásticos e rótulos em bobina/cartela, com material e dimensões verificados no servidor. Para bobinas, o estimador escolhe automaticamente a orientação de menor comprimento nas duas grades retangulares avaliadas; confirme a possibilidade de girar a arte. Outros produtos ainda exigem consumo informado pela gráfica.
 - Pedidos com acompanhamento de chão de fábrica, atendimento compartilhado, relatórios integrados, contas a pagar/receber e aplicativo nativo continuam no roteiro.

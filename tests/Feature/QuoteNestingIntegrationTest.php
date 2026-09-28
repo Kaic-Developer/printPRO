@@ -30,6 +30,7 @@ class QuoteNestingIntegrationTest extends TestCase
             'sign-facade' => ['material-acm-3mm', 'process-welding'],
             'product-acrylic-cutout' => ['material-acrylic-cast-3mm', 'process-laser-router-cut'],
             'product-basic-tshirt' => ['material-cotton-menegotti', 'process-silk-screen'],
+            'product-labels-roll-sheet' => ['material-label-roll-stock', 'process-label-printing'],
             default => ['material-cardstock-300g', 'process-sheet-print'],
         };
         $material = QuotePreset::query()->where('code', $materialCode)->firstOrFail();
@@ -130,10 +131,10 @@ class QuoteNestingIntegrationTest extends TestCase
         ], ['width_m' => '0.3', 'height_m' => '0.2']);
         $this->actingAs($areaUser)->post('/quotes', $areaPayload)->assertRedirect();
         $areaComponent = QuoteItem::query()->latest('id')->firstOrFail()->components()->where('preset_code', $areaMaterial->code)->firstOrFail();
-        $this->assertSame(301, $areaComponent->quantity_milli, json_encode(QuoteItem::query()->latest('id')->firstOrFail()->nesting)); // 300,3 milésimos de m² são arredondados para cima.
+        $this->assertSame(201, $areaComponent->quantity_milli, json_encode(QuoteItem::query()->latest('id')->firstOrFail()->nesting)); // A orientação original consome 200,2 milésimos e arredonda para cima.
         $this->assertSame('m²', $areaComponent->unit);
-        $this->assertSame(30, $areaComponent->cost_cents); // 0,301 m² × 100 centavos, arredondado em centavos.
-        $this->assertSame(33, QuoteItem::query()->latest('id')->firstOrFail()->cost_cents); // inclui 3 centavos de impressão para 0,06 m².
+        $this->assertSame(20, $areaComponent->cost_cents); // 0,201 m² × 100 centavos, arredondado em centavos.
+        $this->assertSame(23, QuoteItem::query()->latest('id')->firstOrFail()->cost_cents); // inclui 3 centavos de impressão para 0,06 m².
     }
 
     public function test_fractional_or_mismatched_line_quantity_and_unverifiable_dimensions_are_rejected(): void
@@ -348,6 +349,102 @@ class QuoteNestingIntegrationTest extends TestCase
                 $this->assertSame('manual', $ink->quantity_source);
             }
         }
+    }
+
+    public function test_label_nesting_links_roll_or_sheet_stock_to_the_selected_format_and_cost_consumption(): void
+    {
+        $fixture = $this->fixture('product-labels-roll-sheet');
+        [$user] = $fixture;
+        $sheetMaterial = QuotePreset::query()->where('code', 'material-label-sheet-stock')->firstOrFail();
+        DB::table('organization_quote_presets')->updateOrInsert(
+            ['organization_id' => $user->organization_id, 'quote_preset_id' => $sheetMaterial->id],
+            ['is_enabled' => true, 'unit_cost_cents' => 200, 'material_width_mm' => 500, 'material_length_mm' => 700, 'created_at' => now(), 'updated_at' => now()],
+        );
+
+        $scenarios = [
+            ['roll', 'material-label-roll-stock', 'roll', 1000, null, 30, 'm²'],
+            ['sheet', 'material-label-sheet-stock', 'sheet', 500, 700, 1000, 'folha'],
+        ];
+        foreach ($scenarios as [$format, $materialCode, $materialType, $materialWidth, $materialLength, $expectedConsumption, $expectedUnit]) {
+            $material = $this->enableMaterial($user, $materialCode);
+            DB::table('organization_quote_presets')->where('organization_id', $user->organization_id)->where('quote_preset_id', $material->id)->update([
+                'material_width_mm' => $materialWidth,
+                'material_length_mm' => $materialLength,
+            ]);
+            $nesting = [
+                'material_code' => $materialCode,
+                'material_type' => $materialType,
+                'quantity' => 20,
+                'piece_width_mm' => 50,
+                'piece_length_mm' => 30,
+                'material_width_mm' => $materialWidth,
+                'gap_mm' => 0,
+            ];
+            if ($materialType === 'sheet') $nesting['material_length_mm'] = $materialLength;
+
+            $this->actingAs($user)->post('/quotes', ['items' => [[
+                'preset_code' => 'product-labels-roll-sheet',
+                'quantity' => '20',
+                'answers' => ['quantity' => '20', 'format' => $format, 'width_mm' => '50', 'height_mm' => '30'],
+                'components' => [
+                    ['code' => $materialCode, 'selected' => true, 'quantity' => '99'],
+                    ['code' => 'process-label-printing', 'selected' => true, 'quantity' => '1'],
+                    ['code' => 'process-label-die-cut', 'selected' => true, 'quantity' => '1'],
+                ],
+                'nesting' => $nesting,
+            ]]])->assertRedirect();
+
+            $item = QuoteItem::query()->latest('id')->firstOrFail();
+            $component = $item->components()->where('preset_code', $materialCode)->firstOrFail();
+            $this->assertSame($expectedConsumption, $component->quantity_milli);
+            $this->assertSame($expectedUnit, $component->unit);
+            $this->assertSame('nesting', $component->quantity_source);
+            $this->assertSame($materialCode, $item->nesting['material_code']);
+        }
+
+        foreach ([
+            ['roll', 'material-label-roll-stock', 'sheet', 1000],
+            ['sheet', 'material-label-sheet-stock', 'roll', 500],
+        ] as [$format, $materialCode, $materialType, $materialWidth]) {
+            $nesting = [
+                'material_code' => $materialCode,
+                'material_type' => $materialType,
+                'quantity' => 1,
+                'piece_width_mm' => 50,
+                'piece_length_mm' => 30,
+                'material_width_mm' => $materialWidth,
+                'gap_mm' => 0,
+            ];
+            if ($materialType === 'sheet') $nesting['material_length_mm'] = 1000;
+            $this->actingAs($user)->post('/quotes', ['items' => [[
+                'preset_code' => 'product-labels-roll-sheet',
+                'quantity' => '1',
+                'answers' => ['quantity' => '1', 'format' => $format, 'width_mm' => '50', 'height_mm' => '30'],
+                'components' => [
+                    ['code' => $materialCode, 'selected' => true, 'quantity' => '1'],
+                    ['code' => 'process-label-printing', 'selected' => true, 'quantity' => '1'],
+                    ['code' => 'process-label-die-cut', 'selected' => true, 'quantity' => '1'],
+                ],
+                'nesting' => $nesting,
+            ]]])->assertSessionHasErrors('items.0.nesting.material_type');
+        }
+
+        $this->actingAs($user)->get('/quotes/create')
+            ->assertOk()
+            ->assertSee('data-preset-panel="product-labels-roll-sheet"', false)
+            ->assertSee('value="material-label-roll-stock"', false)
+            ->assertSee('value="material-label-sheet-stock"', false);
+    }
+
+    private function enableMaterial(User $user, string $materialCode): QuotePreset
+    {
+        $material = QuotePreset::query()->where('code', $materialCode)->firstOrFail();
+        DB::table('organization_quote_presets')->updateOrInsert(
+            ['organization_id' => $user->organization_id, 'quote_preset_id' => $material->id],
+            ['is_enabled' => true, 'unit_cost_cents' => 100, 'material_width_mm' => 1000, 'material_length_mm' => 1000, 'created_at' => now(), 'updated_at' => now()],
+        );
+
+        return $material;
     }
 
     public function test_acrylic_and_plastic_nesting_uses_the_selected_material_and_cast_thickness(): void

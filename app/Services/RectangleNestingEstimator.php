@@ -97,17 +97,20 @@ final class RectangleNestingEstimator
         $normalAcross = $this->fitCount($mw, $pw, $gap);
         $rotatedAcross = $this->fitCount($mw, $pl, $gap);
         // Na bobina, girar a peça troca a dimensão que ocupa a largura fixa.
-        $rotated = $rotatedAcross > $normalAcross;
+        $normalRuns = $normalAcross > 0 ? $this->ceilDiv($quantity, $normalAcross) : null;
+        $rotatedRuns = $rotatedAcross > 0 ? $this->ceilDiv($quantity, $rotatedAcross) : null;
+        $normalLength = $normalRuns === null ? null : $normalRuns * $pl + ($normalRuns - 1) * $gap;
+        $rotatedLength = $rotatedRuns === null ? null : $rotatedRuns * $pw + ($rotatedRuns - 1) * $gap;
+        if ($normalLength === null && $rotatedLength === null) {
+            return $this->notFit($pw, $pl, $mw, 0, $quantity, $gap, $pieceArea, 'roll');
+        }
+        // Menor comprimento total reduz a área de bobina estimada; empate mantém a orientação original.
+        $rotated = $normalLength === null || ($rotatedLength !== null && $rotatedLength < $normalLength);
         $width = $rotated ? $pl : $pw;
         $length = $rotated ? $pw : $pl;
         $across = $rotated ? $rotatedAcross : $normalAcross;
-        if ($across === 0) {
-            return $this->notFit($pw, $pl, $mw, 0, $quantity, $gap, $pieceArea, 'roll');
-        }
-
-        $runs = $this->ceilDiv($quantity, $across);
         // Não adicionamos folga depois da última peça no sentido do comprimento.
-        $rollLength = $runs * $length + ($runs - 1) * $gap;
+        $rollLength = $rotated ? $rotatedLength : $normalLength;
         $consumedArea = $mw * $rollLength;
         $itemArea = $quantity * $pieceArea;
         return [
