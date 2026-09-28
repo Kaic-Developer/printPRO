@@ -127,12 +127,19 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
     const updateWizardQuantityManagement = (panel) => {
         const productCode = panel.dataset.presetPanel;
         const personalization = panel.querySelector('[data-wizard-field="personalization"] select')?.value;
+        const textileProducts = ['uniform-polo', 'product-basic-tshirt', 'product-workwear', 'product-sweatshirt', 'product-apron', 'product-cap'];
         const managedCodes = productCode === 'product-basic-tshirt'
             ? ({
                 dtf: ['process-dtf-print-size', 'material-textile-dtf-transfer'],
                 dtg: ['process-dtg-print-size'],
             })[personalization] ?? []
-            : [];
+            : textileProducts.includes(productCode) && personalization === 'silk-screen'
+                ? ['process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink']
+                : textileProducts.includes(productCode) && personalization === 'embroidery'
+                    ? ['process-computerized-embroidery', ...(panel.querySelector('[data-wizard-field="embroidery_matrix"] select')?.value === '1' ? ['third-party-embroidery-matrix'] : [])]
+                    : [];
+        const colors = ['silk_front_colors', 'silk_back_colors'].reduce((total, key) => total + (Number(panel.querySelector(`[data-wizard-field="${key}"] input`)?.value) || 0), 0);
+        const stitches = Number(panel.querySelector('[data-wizard-field="estimated_stitches"] input')?.value) || 0;
         panel.querySelectorAll('[data-component-code]').forEach((row) => {
             const wasManaged = row.classList.contains('wizard-quantity-managed');
             const managed = managedCodes.includes(row.dataset.componentCode);
@@ -151,7 +158,21 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 if (checkbox) checkbox.checked = true;
             }
             if (quantityBlock) quantityBlock.hidden = managed;
-            if (autoLabel) autoLabel.hidden = !managed;
+            if (autoLabel) {
+                autoLabel.hidden = !managed;
+                if (managed) {
+                    const code = row.dataset.componentCode;
+                    const message = ({
+                        'material-silk-screen-screen': `Calculada uma vez nesta linha: ${colors} tela(s), conforme as cores na frente e no verso.`,
+                        'material-silk-screen-film': `Calculado uma vez nesta linha: ${colors} fotolito(s), conforme as cores na frente e no verso.`,
+                        'material-silk-screen-ink': `Calculada por peça: ${colors} aplicação(ões) de cor × quantidade de peças.`,
+                        'process-silk-screen': `Calculado por peça: ${colors} aplicação(ões) de cor × quantidade de peças.`,
+                        'process-computerized-embroidery': `Calculado por peça: ${stitches.toLocaleString('pt-BR')} pontos ÷ 1.000 × quantidade do pedido.`,
+                        'third-party-embroidery-matrix': 'Uma matriz para esta linha/arte. Se já estiver pronta, marque “Matriz necessária” como Não.',
+                    })[code] ?? 'Consumo calculado pela ficha técnica e multiplicado pela quantidade do pedido.';
+                    autoLabel.textContent = message;
+                }
+            }
             row.classList.toggle('wizard-quantity-managed', managed);
         });
     };

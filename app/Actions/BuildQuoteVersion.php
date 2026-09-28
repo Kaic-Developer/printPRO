@@ -122,7 +122,7 @@ class BuildQuoteVersion
             $nesting = isset($input['nesting'])
                 ? $this->nestingSnapshot($preset, $answers, $quantityMilli, $input['nesting'], $codes, $user->organization_id, $presetSettings, $index, $areaCopies)
                 : null;
-            $wizardQuantities = $this->wizardCalculatedQuantities($preset, $answers, $index);
+            $wizardQuantities = $this->wizardCalculatedQuantities($preset, $answers, $quantityMilli, $index);
 
             $costCents = 0;
             $itemComplete = true;
@@ -149,8 +149,9 @@ class BuildQuoteVersion
                     $componentQuantity = null;
                     $totalComponentQuantity = $componentNesting['consumed_quantity_milli'];
                 } elseif (array_key_exists($component->code, $wizardQuantities)) {
-                    $componentQuantity = $wizardQuantities[$component->code];
-                    $totalComponentQuantity = $this->pricing->multiplyMilli($componentQuantity, $quantityMilli);
+                    $wizardQuantity = $wizardQuantities[$component->code];
+                    $componentQuantity = $wizardQuantity['quantity_per_unit_milli'];
+                    $totalComponentQuantity = $wizardQuantity['quantity_milli'];
                 } else {
                     $quantityRaw = $componentInput['quantity'] ?? null;
                     try {
@@ -291,9 +292,36 @@ class BuildQuoteVersion
     }
 
     /** Calcula a área vendável por peça quando o wizard recebe dimensões explícitas da estampa. */
-    private function wizardCalculatedQuantities(QuotePreset $product, array $answers, int $index): array
+    private function wizardCalculatedQuantities(QuotePreset $product, array $answers, int $lineQuantityMilli, int $index): array
     {
-        if ($product->code !== 'product-basic-tshirt' || ! in_array($answers['personalization'] ?? null, ['dtf', 'dtg'], true)) {
+        $personalization = $answers['personalization'] ?? null;
+        if (in_array($product->code, ['uniform-polo', 'product-basic-tshirt', 'product-workwear', 'product-sweatshirt', 'product-apron', 'product-cap'], true)) {
+            if ($personalization === 'silk-screen') {
+                $colorCount = (int) ($answers['silk_front_colors'] ?? 0) + (int) ($answers['silk_back_colors'] ?? 0);
+                return [
+                    // Telas e fotolitos são matrizes da linha de produto: cada cor por face é produzida uma vez.
+                    'material-silk-screen-screen' => ['quantity_per_unit_milli' => null, 'quantity_milli' => $colorCount * 1000],
+                    'material-silk-screen-film' => ['quantity_per_unit_milli' => null, 'quantity_milli' => $colorCount * 1000],
+                    // Mão de obra e tinta são calculadas por aplicação de uma cor em uma peça.
+                    'process-silk-screen' => ['quantity_per_unit_milli' => $colorCount * 1000, 'quantity_milli' => $this->pricing->multiplyMilli($colorCount * 1000, $lineQuantityMilli)],
+                    'material-silk-screen-ink' => ['quantity_per_unit_milli' => $colorCount * 1000, 'quantity_milli' => $this->pricing->multiplyMilli($colorCount * 1000, $lineQuantityMilli)],
+                ];
+            }
+            if ($personalization === 'embroidery') {
+                $stitches = (int) ($answers['estimated_stitches'] ?? 0);
+                $quantities = [
+                    // O processo é precificado por mil pontos; o inteiro de pontos já representa seus milésimos.
+                    'process-computerized-embroidery' => ['quantity_per_unit_milli' => $stitches, 'quantity_milli' => $this->pricing->multiplyMilli($stitches, $lineQuantityMilli)],
+                ];
+                if (filter_var($answers['embroidery_matrix'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                    // A matriz é um serviço de preparação por linha/arte, cobrado uma única vez.
+                    $quantities['third-party-embroidery-matrix'] = ['quantity_per_unit_milli' => null, 'quantity_milli' => 1000];
+                }
+                return $quantities;
+            }
+        }
+
+        if ($product->code !== 'product-basic-tshirt' || ! in_array($personalization, ['dtf', 'dtg'], true)) {
             return [];
         }
 
@@ -327,7 +355,8 @@ class BuildQuoteVersion
             ? ['process-dtf-print-size', 'material-textile-dtf-transfer']
             : ['process-dtg-print-size'];
 
-        return array_fill_keys($codes, $areaMilliPerPiece);
+        $totalAreaMilli = $this->pricing->multiplyMilli($areaMilliPerPiece, $lineQuantityMilli);
+        return array_fill_keys($codes, ['quantity_per_unit_milli' => $areaMilliPerPiece, 'quantity_milli' => $totalAreaMilli]);
     }
 
     private function lineQuantity(array $input, array $answers, int $index): int

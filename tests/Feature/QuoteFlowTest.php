@@ -160,6 +160,134 @@ class QuoteFlowTest extends TestCase
         $this->assertDatabaseCount('quote_versions', 1);
     }
 
+    public function test_silk_screen_setup_and_per_piece_cost_quantities_follow_color_counts(): void
+    {
+        $user = $this->owner();
+        $product = QuotePreset::query()->where('code', 'product-workwear')->firstOrFail();
+        $codes = ['material-brim', 'process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink'];
+        $unitCosts = [100, 50, 200, 100, 25];
+        foreach ($codes as $index => $code) {
+            $component = QuotePreset::query()->where('code', $code)->firstOrFail();
+            DB::table('organization_quote_presets')->where('organization_id', $user->organization_id)->where('quote_preset_id', $component->id)->update(['unit_cost_cents' => $unitCosts[$index]]);
+        }
+
+        $this->actingAs($user)->post('/quotes', ['items' => [[
+            'preset_code' => $product->code,
+            'quantity' => '5',
+            'answers' => [
+                'garment' => 'lab_coat', 'size_grid' => ['P' => 2, 'M' => 3], 'personalization' => 'silk-screen',
+                'silk_front_colors' => 2, 'silk_back_colors' => 1,
+            ],
+            'components' => collect($codes)->map(fn (string $code): array => ['code' => $code, 'selected' => true, ...($code === 'material-brim' ? ['quantity' => '1'] : [])])->all(),
+        ]]])->assertRedirect()->assertSessionHasNoErrors();
+
+        $item = \App\Models\QuoteItem::query()->firstOrFail();
+        $screen = $item->components()->where('preset_code', 'material-silk-screen-screen')->firstOrFail();
+        $film = $item->components()->where('preset_code', 'material-silk-screen-film')->firstOrFail();
+        $process = $item->components()->where('preset_code', 'process-silk-screen')->firstOrFail();
+        $ink = $item->components()->where('preset_code', 'material-silk-screen-ink')->firstOrFail();
+
+        $this->assertSame(3000, $screen->quantity_milli);
+        $this->assertNull($screen->quantity_per_unit_milli);
+        $this->assertSame(3000, $film->quantity_milli);
+        $this->assertSame('wizard', $film->quantity_source);
+        $this->assertSame(15000, $process->quantity_milli);
+        $this->assertSame(15000, $ink->quantity_milli);
+        $this->assertSame(3000, $ink->quantity_per_unit_milli);
+        $this->assertSame(600, $screen->cost_cents);
+        $this->assertSame(300, $film->cost_cents);
+        $this->assertSame(750, $process->cost_cents);
+        $this->assertSame(375, $ink->cost_cents);
+    }
+
+    public function test_embroidery_points_and_matrix_setup_are_priced_once_per_quote_line(): void
+    {
+        $user = $this->owner();
+        $product = QuotePreset::query()->where('code', 'product-workwear')->firstOrFail();
+        foreach (['process-computerized-embroidery' => 250, 'third-party-embroidery-matrix' => 5000] as $code => $unitCost) {
+            $component = QuotePreset::query()->where('code', $code)->firstOrFail();
+            DB::table('organization_quote_presets')->where('organization_id', $user->organization_id)->where('quote_preset_id', $component->id)->update(['unit_cost_cents' => $unitCost]);
+        }
+
+        $this->actingAs($user)->post('/quotes', ['items' => [[
+            'preset_code' => $product->code,
+            'quantity' => '4',
+            'answers' => [
+                'garment' => 'lab_coat', 'size_grid' => ['M' => 4], 'personalization' => 'embroidery',
+                'logo_width_cm' => '6', 'logo_height_cm' => '4', 'estimated_stitches' => '2500', 'embroidery_matrix' => true,
+            ],
+            'components' => collect(['material-brim', 'process-computerized-embroidery', 'third-party-embroidery-matrix'])
+                ->map(fn (string $code): array => ['code' => $code, 'selected' => true, 'quantity' => '1'])->all(),
+        ]]])->assertRedirect();
+
+        $item = \App\Models\QuoteItem::query()->firstOrFail();
+        $process = $item->components()->where('preset_code', 'process-computerized-embroidery')->firstOrFail();
+        $matrix = $item->components()->where('preset_code', 'third-party-embroidery-matrix')->firstOrFail();
+
+        $this->assertSame(2500, $process->quantity_per_unit_milli);
+        $this->assertSame(10000, $process->quantity_milli);
+        $this->assertSame(2500, $process->cost_cents);
+        $this->assertNull($matrix->quantity_per_unit_milli);
+        $this->assertSame(1000, $matrix->quantity_milli);
+        $this->assertSame(5000, $matrix->cost_cents);
+        $this->assertSame('wizard', $matrix->quantity_source);
+    }
+
+    public function test_tenant_textile_presets_share_exact_silk_and_embroidery_quantity_rules(): void
+    {
+        $user = $this->owner();
+        $silkCases = [
+            'uniform-polo' => ['material-piquet', ['size_grid' => ['P' => 2], 'fabric' => 'piquet', 'rib_knit_collar' => false, 'custom_piping' => false, 'individual_bag' => false, 'custom_label' => false]],
+            'product-basic-tshirt' => ['material-cotton-menegotti', ['size_grid' => ['P' => 2], 'fabric' => 'cotton']],
+            'product-workwear' => ['material-brim', ['size_grid' => ['P' => 2], 'garment' => 'lab_coat']],
+            'product-apron' => ['material-brim', ['quantity' => '2', 'fabric' => 'brim']],
+        ];
+        foreach ($silkCases as $productCode => [$materialCode, $details]) {
+            $product = QuotePreset::query()->where('code', $productCode)->firstOrFail();
+            $codes = [$materialCode, 'process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink'];
+            $this->actingAs($user)->post('/quotes', ['items' => [[
+                'preset_code' => $productCode,
+                'quantity' => '2',
+                'answers' => $details + ['personalization' => 'silk-screen', 'silk_front_colors' => 2, 'silk_back_colors' => 1],
+                'components' => collect($codes)->map(fn (string $code): array => ['code' => $code, 'selected' => true, ...($code === $materialCode ? ['quantity' => '1'] : [])])->all(),
+            ]]])->assertRedirect()->assertSessionHasNoErrors();
+
+            $quoteId = \App\Models\Quote::query()->latest('id')->value('id');
+            $versionId = QuoteVersion::query()->where('quote_id', $quoteId)->value('id');
+            $item = \App\Models\QuoteItem::query()->where('quote_version_id', $versionId)->firstOrFail();
+            $this->assertSame(3000, $item->components()->where('preset_code', 'material-silk-screen-screen')->value('quantity_milli'), $productCode);
+            $this->assertSame(6000, $item->components()->where('preset_code', 'process-silk-screen')->value('quantity_milli'), $productCode);
+        }
+
+        $embroideryCases = [
+            'uniform-polo' => ['material-piquet', ['size_grid' => ['P' => 2], 'fabric' => 'piquet', 'rib_knit_collar' => false, 'custom_piping' => false, 'individual_bag' => false, 'custom_label' => false]],
+            'product-workwear' => ['material-brim', ['size_grid' => ['P' => 2], 'garment' => 'lab_coat']],
+            'product-sweatshirt' => ['material-sweatshirt-fabric', ['size_grid' => ['P' => 2]]],
+            'product-apron' => ['material-brim', ['quantity' => '2', 'fabric' => 'brim']],
+            'product-cap' => ['material-cap-base', ['quantity' => '2', 'cap_model' => 'curved']],
+        ];
+        foreach ($embroideryCases as $productCode => [$materialCode, $details]) {
+            $product = QuotePreset::query()->where('code', $productCode)->firstOrFail();
+            $codes = [$materialCode, 'process-computerized-embroidery', 'third-party-embroidery-matrix'];
+            $response = $this->post('/quotes', ['items' => [[
+                'preset_code' => $productCode,
+                'quantity' => '2',
+                'answers' => $details + [
+                    'personalization' => 'embroidery', 'logo_width_cm' => '6', 'logo_height_cm' => '4',
+                    'estimated_stitches' => '2500', 'embroidery_matrix' => true,
+                ],
+                'components' => collect($codes)->map(fn (string $code): array => ['code' => $code, 'selected' => true, ...($code === $materialCode ? ['quantity' => '1'] : [])])->all(),
+            ]]]);
+            $response->assertRedirect()->assertSessionHasNoErrors();
+
+            $quoteId = \App\Models\Quote::query()->latest('id')->value('id');
+            $versionId = QuoteVersion::query()->where('quote_id', $quoteId)->value('id');
+            $item = \App\Models\QuoteItem::query()->where('quote_version_id', $versionId)->firstOrFail();
+            $this->assertSame(5000, $item->components()->where('preset_code', 'process-computerized-embroidery')->value('quantity_milli'), $productCode);
+            $this->assertSame(1000, $item->components()->where('preset_code', 'third-party-embroidery-matrix')->value('quantity_milli'), $productCode);
+        }
+    }
+
     public function test_workwear_api_rejects_omitted_matrix_choice_and_negative_silk_colors(): void
     {
         $user = $this->owner();
