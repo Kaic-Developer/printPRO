@@ -289,6 +289,67 @@ class QuoteNestingIntegrationTest extends TestCase
         $this->assertSame(10, $ink->quantity_per_unit_milli);
     }
 
+    public function test_dtf_area_is_calculated_for_polo_sweatshirt_apron_and_generic_applications(): void
+    {
+        $garments = [
+            ['uniform-polo', ['size_grid' => ['P' => 1, 'M' => 2], 'fabric' => 'piquet', 'personalization' => 'dtf', 'print_size' => 'custom_area', 'prints_per_piece' => '2', 'print_width_cm' => '25', 'print_height_cm' => '30', 'rib_knit_collar' => false, 'custom_piping' => false, 'individual_bag' => false, 'custom_label' => false], ['material-piquet', 'process-dtf-print-size', 'material-textile-dtf-transfer'], 'process-dtf-print-size'],
+            ['product-sweatshirt', ['size_grid' => ['P' => 1, 'M' => 2], 'personalization' => 'dtf', 'print_size' => 'custom_area', 'prints_per_piece' => '2', 'print_width_cm' => '25', 'print_height_cm' => '30'], ['material-sweatshirt-fabric', 'process-dtf', 'material-textile-dtf-transfer'], 'process-dtf'],
+            ['product-apron', ['quantity' => '3', 'fabric' => 'brim', 'personalization' => 'dtf', 'print_size' => 'custom_area', 'prints_per_piece' => '2', 'print_width_cm' => '25', 'print_height_cm' => '30'], ['material-brim', 'process-dtf', 'material-textile-dtf-transfer'], 'process-dtf'],
+        ];
+
+        foreach ($garments as [$presetCode, $answers, $codes, $processCode]) {
+            [$user] = $this->fixture($presetCode);
+            $components = array_map(fn (string $code) => ['code' => $code, 'selected' => true, 'quantity' => '0.01'], $codes);
+            $this->actingAs($user)->post('/quotes', ['items' => [[
+                'preset_code' => $presetCode,
+                'quantity' => '3',
+                'answers' => $answers,
+                'components' => $components,
+            ]]])->assertRedirect();
+
+            $item = QuoteItem::query()->latest('id')->firstOrFail();
+            $process = $item->components()->where('preset_code', $processCode)->firstOrFail();
+            $this->assertSame(150, $process->quantity_per_unit_milli); // 25 x 30 cm x duas posiÃ§Ãµes.
+            $this->assertSame(450, $process->quantity_milli); // TrÃªs peÃ§as pela grade ou quantidade.
+            $this->assertSame('wizard', $process->quantity_source);
+        }
+    }
+
+    public function test_generic_dtf_dtg_application_uses_matching_area_process_and_keeps_ink_manual(): void
+    {
+        [$user] = $this->fixture('product-dtf-dtg-print');
+        $this->actingAs($user)->post('/quotes', ['items' => [[
+            'preset_code' => 'product-dtf-dtg-print',
+            'quantity' => '1',
+            'answers' => ['technique' => 'dtf', 'quantity' => '1', 'print_size' => 'custom_area', 'garment_supplied_by_customer' => true],
+            'components' => [],
+        ]]])->assertSessionHasErrors('custom_width_cm');
+
+        $scenarios = [
+            ['dtf', 'custom_area', ['custom_width_cm' => '20', 'custom_height_cm' => '20'], ['process-dtf-print-size', 'material-textile-dtf-transfer'], 'process-dtf-print-size', 40],
+            ['dtg', 'a4', [], ['process-dtg-print-size', 'material-textile-dtg-ink'], 'process-dtg-print-size', 63],
+        ];
+
+        foreach ($scenarios as [$technique, $size, $dimensions, $codes, $calculatedCode, $expectedPerApplication]) {
+            $this->actingAs($user)->post('/quotes', ['items' => [[
+                'preset_code' => 'product-dtf-dtg-print',
+                'quantity' => '2',
+                'answers' => ['technique' => $technique, 'quantity' => '2', 'print_size' => $size, 'garment_supplied_by_customer' => true, ...$dimensions],
+                'components' => array_map(fn (string $code) => ['code' => $code, 'selected' => true, 'quantity' => '0.01'], $codes),
+            ]]])->assertRedirect();
+
+            $item = QuoteItem::query()->latest('id')->firstOrFail();
+            $calculated = $item->components()->where('preset_code', $calculatedCode)->firstOrFail();
+            $this->assertSame($expectedPerApplication, $calculated->quantity_per_unit_milli);
+            $this->assertSame($expectedPerApplication * 2, $calculated->quantity_milli);
+            $this->assertSame('wizard', $calculated->quantity_source);
+            if ($technique === 'dtg') {
+                $ink = $item->components()->where('preset_code', 'material-textile-dtg-ink')->firstOrFail();
+                $this->assertSame('manual', $ink->quantity_source);
+            }
+        }
+    }
+
     public function test_acrylic_and_plastic_nesting_uses_the_selected_material_and_cast_thickness(): void
     {
         $fixture = $this->fixture('product-acrylic-cutout');

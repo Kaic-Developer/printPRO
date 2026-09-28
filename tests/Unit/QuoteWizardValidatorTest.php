@@ -31,4 +31,21 @@ class QuoteWizardValidatorTest extends TestCase
             ['key' => 'embroidery_matrix', 'type' => 'boolean', 'required' => true, 'visible_when' => ['field' => 'personalization', 'equals' => 'embroidery']],
         ]], ['personalization' => 'embroidery']);
     }
+
+    public function test_nested_conditional_fields_are_ignored_when_their_controller_is_hidden(): void
+    {
+        $schema = ['fields' => [
+            ['key' => 'technique', 'type' => 'select', 'required' => true, 'options' => [['value' => 'dtf'], ['value' => 'dtg']]],
+            ['key' => 'print_size', 'type' => 'select', 'required' => true, 'options' => [['value' => 'a4'], ['value' => 'custom_area']], 'visible_when' => ['field' => 'technique', 'equals' => 'dtf']],
+            ['key' => 'custom_width_cm', 'type' => 'decimal', 'required' => true, 'visible_when' => ['field' => 'print_size', 'equals' => 'custom_area']],
+        ]];
+
+        $answers = (new QuoteWizardValidator)->validate($schema, [
+            'technique' => 'dtg',
+            'print_size' => 'custom_area',
+            'custom_width_cm' => 'invalid-but-hidden',
+        ]);
+
+        $this->assertSame(['technique' => 'dtg'], $answers);
+    }
 }

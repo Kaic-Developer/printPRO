@@ -80,9 +80,11 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             const controllingKey = field.dataset.visibleField;
             if (!controllingKey) return;
             const controllingInput = panel.querySelector(`[name$="[${CSS.escape(controllingKey)}]"]`);
+            const controllingField = panel.querySelector(`[data-wizard-field="${CSS.escape(controllingKey)}"]`);
             const actualValue = controllingInput?.type === 'checkbox' ? (controllingInput.checked ? '1' : '0') : controllingInput?.value;
             const allowedValues = field.dataset.visibleIn?.split(',').filter(Boolean);
-            const visible = allowedValues ? allowedValues.includes(actualValue) : actualValue === field.dataset.visibleEquals;
+            const parentVisible = !controllingField || !controllingField.hidden;
+            const visible = parentVisible && (allowedValues ? allowedValues.includes(actualValue) : actualValue === field.dataset.visibleEquals);
             field.hidden = !visible;
             field.querySelectorAll('input, select, textarea').forEach((control) => {
                 control.disabled = !visible;
@@ -128,11 +130,15 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         const productCode = panel.dataset.presetPanel;
         const personalization = panel.querySelector('[data-wizard-field="personalization"] select')?.value;
         const textileProducts = ['uniform-polo', 'product-basic-tshirt', 'product-workwear', 'product-sweatshirt', 'product-apron', 'product-cap'];
-        const managedCodes = productCode === 'product-basic-tshirt'
+        const managedCodes = productCode === 'product-dtf-dtg-print'
+            ? ({ dtf: ['process-dtf-print-size', 'material-textile-dtf-transfer'], dtg: ['process-dtg-print-size'] })[panel.querySelector('[data-wizard-field="technique"] select')?.value] ?? []
+            : productCode === 'product-basic-tshirt'
             ? ({
                 dtf: ['process-dtf-print-size', 'material-textile-dtf-transfer'],
                 dtg: ['process-dtg-print-size'],
             })[personalization] ?? []
+            : ['uniform-polo', 'product-sweatshirt', 'product-apron'].includes(productCode) && personalization === 'dtf'
+                ? [productCode === 'uniform-polo' ? 'process-dtf-print-size' : 'process-dtf', 'material-textile-dtf-transfer']
             : textileProducts.includes(productCode) && personalization === 'silk-screen'
                 ? ['process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink']
                 : textileProducts.includes(productCode) && personalization === 'embroidery'

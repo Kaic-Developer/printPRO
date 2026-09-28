@@ -16,11 +16,12 @@ final class QuoteWizardValidator
 
         $rules = [];
         $allowed = [];
+        $fieldsByKey = collect($schema['fields'] ?? [])->keyBy('key')->all();
         foreach ($schema['fields'] ?? [] as $field) {
             $key = $field['key'];
             $allowed[] = $key;
             $value = $answers[$key] ?? null;
-            $visible = $this->visible($field, $answers);
+            $visible = $this->visible($field, $answers, $fieldsByKey);
             if (! $visible) {
                 continue;
             }
@@ -44,9 +45,9 @@ final class QuoteWizardValidator
             '*.in' => 'Selecione uma opção disponível.',
             '*.regex' => 'Use somente números e até três casas decimais.',
         ]);
-        $validator->after(function ($validator) use ($schema, $filtered): void {
+        $validator->after(function ($validator) use ($schema, $filtered, $fieldsByKey): void {
             foreach ($schema['fields'] ?? [] as $field) {
-                if (! $this->visible($field, $filtered) || ! array_key_exists($field['key'], $filtered) || $filtered[$field['key']] === null || $filtered[$field['key']] === '') {
+                if (! $this->visible($field, $filtered, $fieldsByKey) || ! array_key_exists($field['key'], $filtered) || $filtered[$field['key']] === null || $filtered[$field['key']] === '') {
                     continue;
                 }
                 $value = $filtered[$field['key']];
@@ -77,17 +78,22 @@ final class QuoteWizardValidator
         }
 
         // Campos invisíveis não entram no snapshot, para evitar reaproveitar uma resposta condicional obsoleta.
-        return collect($filtered)->filter(function ($value, $key) use ($schema, $filtered): bool {
+        return collect($filtered)->filter(function ($value, $key) use ($schema, $filtered, $fieldsByKey): bool {
             $field = collect($schema['fields'] ?? [])->firstWhere('key', $key);
-            return $field !== null && $this->visible($field, $filtered);
+            return $field !== null && $this->visible($field, $filtered, $fieldsByKey);
         })->all();
     }
 
-    private function visible(array $field, array $answers): bool
+    private function visible(array $field, array $answers, array $fieldsByKey = [], array $visited = []): bool
     {
+        if (in_array($field['key'] ?? null, $visited, true)) return false;
         $condition = $field['visible_when'] ?? null;
         if ($condition === null) {
             return true;
+        }
+        $controller = $fieldsByKey[$condition['field']] ?? null;
+        if ($controller !== null && ! $this->visible($controller, $answers, $fieldsByKey, [...$visited, $field['key']])) {
+            return false;
         }
         $actual = $answers[$condition['field']] ?? null;
         if (isset($condition['in'])) {

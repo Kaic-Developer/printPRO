@@ -295,6 +295,22 @@ class BuildQuoteVersion
     private function wizardCalculatedQuantities(QuotePreset $product, array $answers, int $lineQuantityMilli, int $index): array
     {
         $personalization = $answers['personalization'] ?? null;
+        if ($product->code === 'product-dtf-dtg-print') {
+            $codes = match ($answers['technique'] ?? null) {
+                'dtf' => ['process-dtf-print-size', 'material-textile-dtf-transfer'],
+                'dtg' => ['process-dtg-print-size'],
+                default => [],
+            };
+            return $this->printAreaQuantities($answers, $codes, $lineQuantityMilli, 1, $index, 'custom_width_cm', 'custom_height_cm');
+        }
+
+        if (in_array($product->code, ['uniform-polo', 'product-sweatshirt', 'product-apron'], true) && $personalization === 'dtf') {
+            $codes = $product->code === 'uniform-polo'
+                ? ['process-dtf-print-size', 'material-textile-dtf-transfer']
+                : ['process-dtf', 'material-textile-dtf-transfer'];
+            return $this->printAreaQuantities($answers, $codes, $lineQuantityMilli, 1, $index, 'print_width_cm', 'print_height_cm', 'prints_per_piece');
+        }
+
         if (in_array($product->code, ['uniform-polo', 'product-basic-tshirt', 'product-workwear', 'product-sweatshirt', 'product-apron', 'product-cap'], true)) {
             if ($personalization === 'silk-screen') {
                 $colorCount = (int) ($answers['silk_front_colors'] ?? 0) + (int) ($answers['silk_back_colors'] ?? 0);
@@ -357,6 +373,47 @@ class BuildQuoteVersion
 
         $totalAreaMilli = $this->pricing->multiplyMilli($areaMilliPerPiece, $lineQuantityMilli);
         return array_fill_keys($codes, ['quantity_per_unit_milli' => $areaMilliPerPiece, 'quantity_milli' => $totalAreaMilli]);
+    }
+
+    /** Calcula área dos formatos têxteis e aplica quantidades sem converter valores em float. */
+    private function printAreaQuantities(array $answers, array $codes, int $lineQuantityMilli, int $defaultPositions, int $index, string $customWidthKey, string $customHeightKey, ?string $positionsKey = null): array
+    {
+        if ($codes === []) return [];
+
+        $standardSizes = ['a4' => [210, 297], 'a3' => [297, 420], 'a2' => [420, 594]];
+        $dimensions = $standardSizes[$answers['print_size'] ?? ''] ?? null;
+        if ($dimensions === null && ($answers['print_size'] ?? null) === 'custom_area') {
+            $widthMilliCm = $this->centimeterMilli($answers[$customWidthKey] ?? null);
+            $heightMilliCm = $this->centimeterMilli($answers[$customHeightKey] ?? null);
+            if ($widthMilliCm === null || $heightMilliCm === null || $widthMilliCm < 100 || $heightMilliCm < 100) {
+                throw ValidationException::withMessages(["items.{$index}.answers.{$customWidthKey}" => 'Informe largura e altura válidas para a área personalizada.']);
+            }
+            // cm escalados por mil produzem milésimos de m² ao dividir pela conversão exata.
+            $areaMilliPerPosition = intdiv(($widthMilliCm * $heightMilliCm) + 9_999_999, 10_000_000);
+        } elseif ($dimensions !== null) {
+            $areaMilliPerPosition = intdiv(($dimensions[0] * $dimensions[1]) + 999, 1000);
+        } else {
+            throw ValidationException::withMessages(["items.{$index}.answers.print_size" => 'Selecione A4, A3, A2 ou informe uma área personalizada.']);
+        }
+
+        $positions = $positionsKey === null ? $defaultPositions : filter_var($answers[$positionsKey] ?? null, FILTER_VALIDATE_INT);
+        if ($positions === false || $positions < 1 || $positions > 100) {
+            throw ValidationException::withMessages(["items.{$index}.answers.{$positionsKey}" => 'Informe de 1 a 100 estampas por peça.']);
+        }
+
+        // Arredondar cada posição para cima evita subestimar insumos comprados por m².
+        $areaMilliPerPiece = $areaMilliPerPosition * $positions;
+        $totalAreaMilli = $this->pricing->multiplyMilli($areaMilliPerPiece, $lineQuantityMilli);
+
+        return array_fill_keys($codes, ['quantity_per_unit_milli' => $areaMilliPerPiece, 'quantity_milli' => $totalAreaMilli]);
+    }
+
+    private function centimeterMilli(mixed $value): ?int
+    {
+        if (! is_string($value) && ! is_int($value)) return null;
+        $value = (string) $value;
+        if (! preg_match('/\A(\d{1,4})(?:[.,](\d{1,3}))?\z/', $value, $parts)) return null;
+        return (int) $parts[1] * 1000 + (int) str_pad($parts[2] ?? '', 3, '0');
     }
 
     private function lineQuantity(array $input, array $answers, int $index): int

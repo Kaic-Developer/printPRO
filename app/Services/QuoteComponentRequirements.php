@@ -16,6 +16,7 @@ final class QuoteComponentRequirements
             'product-printed-adhesive' => $this->adhesive($answers),
             'uniform-polo' => $this->polo($answers),
             'product-basic-tshirt' => $this->basicTshirt($answers),
+            'product-dtf-dtg-print' => $this->dtfDtgPrint($answers),
             'print-business-card' => $this->businessCard($answers),
             'product-presentation-folder' => $this->presentationFolder($answers),
             'product-flyer' => $this->printedStock($answers, ['process-sheet-print', 'process-cutting']),
@@ -47,6 +48,7 @@ final class QuoteComponentRequirements
             'product-presentation-folder', 'product-flyer', 'product-folder-print' => ['material-cardstock-250g', 'material-couche-300g', 'material-offset-90g'],
             'product-envelopes', 'product-letterhead' => ['material-offset-90g'],
             'product-carbonless-pads' => ['material-carbonless-2-part', 'material-carbonless-3-part'],
+            'product-dtf-dtg-print' => ['process-dtf-print-size', 'process-dtg-print-size', 'material-textile-dtf-transfer', 'material-textile-dtg-ink'],
             'uniform-polo' => ['material-piquet', 'material-dryfit', 'material-cotton-menegotti', 'process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink', 'process-computerized-embroidery', 'third-party-embroidery-matrix', 'process-dtf-print-size', 'material-textile-dtf-transfer', 'process-textile-vinyl', 'material-textile-vinyl'],
             'product-basic-tshirt' => ['material-cotton-menegotti', 'material-polyester', 'material-dryfit', 'process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink', 'process-dtf-print-size', 'material-textile-dtf-transfer', 'process-dtg-print-size', 'material-textile-dtg-ink', 'process-sublimation', 'material-sublimation-paper', 'material-sublimation-ink', 'process-textile-vinyl', 'material-textile-vinyl'],
             'product-workwear' => $this->textileChoiceGroup('workwear'),
@@ -75,6 +77,7 @@ final class QuoteComponentRequirements
             'product-carbonless-pads' => [$this->carbonlessPads($answers)[0]],
             'uniform-polo' => $this->polo($answers),
             'product-basic-tshirt' => $this->basicTshirt($answers),
+            'product-dtf-dtg-print' => $this->dtfDtgPrint($answers),
             'product-workwear', 'product-sweatshirt', 'product-apron', 'product-cap' => $this->textileGarment($productCode, $answers),
             default => [],
         };
@@ -393,6 +396,16 @@ final class QuoteComponentRequirements
         };
 
         return [$fabric, ...$personalization];
+    }
+
+    /** Escolhe uma única técnica e os insumos correspondentes para a aplicação DTF/DTG avulsa. */
+    private function dtfDtgPrint(array $answers): array
+    {
+        return match ($answers['technique'] ?? '') {
+            'dtf' => ['process-dtf-print-size', 'material-textile-dtf-transfer'],
+            'dtg' => ['process-dtg-print-size', 'material-textile-dtg-ink'],
+            default => [],
+        };
     }
 
     private function isTrue(mixed $value): bool
