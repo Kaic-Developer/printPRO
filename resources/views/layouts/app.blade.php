@@ -11,6 +11,8 @@
 <a href="{{ route('dashboard') }}" @class(['nav-item', 'active' => request()->routeIs('dashboard')]) @if(request()->routeIs('dashboard')) aria-current="page" @endif><x-icon/>Visão geral</a>
 <a href="{{ route('customers.index') }}" @class(['nav-item', 'active' => request()->routeIs('customers.*')]) @if(request()->routeIs('customers.*')) aria-current="page" @endif><x-icon name="users"/>Clientes</a>
 <a href="{{ route('products.index') }}" @class(['nav-item', 'active' => request()->routeIs('products.*')]) @if(request()->routeIs('products.*')) aria-current="page" @endif><x-icon name="catalog"/>Catálogo</a>
+<a href="{{ route('finance.index') }}" @class(['nav-item', 'active' => request()->routeIs('finance.*')]) @if(request()->routeIs('finance.*')) aria-current="page" @endif><x-icon name="chart"/>Financeiro</a>
+<a href="{{ route('modules.index') }}" @class(['nav-item', 'active' => request()->routeIs('modules.*')]) @if(request()->routeIs('modules.*')) aria-current="page" @endif><x-icon name="grid"/>Módulos</a>
 </nav>
 <div class="sidebar-footer"><span class="eyebrow">UM BOM COMEÇO</span><p>Organize seus clientes.<br>Cuide de cada relação.</p><span class="version">WebPrintPRO · Gestão para gráficas</span></div>
 </aside>

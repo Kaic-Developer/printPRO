@@ -42,3 +42,19 @@ if (unitSelect && customUnit) {
     unitSelect.addEventListener('change', updateCustomUnit);
     updateCustomUnit();
 }
+
+// A máscara monetária agrupa dígitos como centavos e não depende de ponto flutuante.
+document.querySelectorAll('[data-money-input]').forEach((input) => {
+    const formatMoney = () => {
+        const digits = input.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+        if (!digits) {
+            input.value = '';
+            return;
+        }
+        const padded = digits.padStart(3, '0');
+        const whole = padded.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        input.value = whole + ',' + padded.slice(-2);
+    };
+    input.addEventListener('input', formatMoney);
+    if (input.value) formatMoney();
+});

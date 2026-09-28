@@ -1,7 +1,7 @@
 # Estado do projeto
 
 ## Etapa atual
-Fluxos implementados: organizacao, login, painel, clientes e catalogo de produtos. O servidor local esta disponivel em http://127.0.0.1:8000.
+Fluxos implementados: organizacao, login, painel, clientes, catalogo e financeiro inicial. O servidor local esta disponivel em http://127.0.0.1:8000.
 
 ## Decisoes
 - Sem Docker, conforme solicitacao. PHP 8.2 do XAMPP e MySQL local.
@@ -16,9 +16,12 @@ Fluxos implementados: organizacao, login, painel, clientes e catalogo de produto
 
 ## Em andamento
 - Catalogo concluido nesta etapa: produtos com busca, filtro de situacao, unidades, preco opcional em centavos, edicao e ativacao/desativacao. Exclusao nao e oferecida.
+- Financeiro inicial implementado: lancamentos manuais de entradas e saidas, valores em centavos, filtro mensal, saldo do periodo e grafico baseado em dados reais.
+- Pagina de modulos criada para mostrar as entregas disponiveis e o roteiro futuro.
+- MySQL local: migracao financeira aplicada. A migracao de produtos segue pendente porque o MariaDB lista um arquivo products que nao existe no mecanismo InnoDB; nenhum arquivo de dados foi removido ou alterado.
 - Revisao independente do Crivo fica pendente ate o agente voltar a estar disponivel.
 - Criacao da conta inicial aguarda um e-mail valido: `kaic@developer@gmail.com` foi recusado pela validacao porque contem dois caracteres `@`. Nenhuma conta foi criada.
 
 ## Proximos modulos
-Regras comerciais e precificacao configuraveis → orcamentos versionados → aprovacao → pedidos e producao.
+Orcamentos e aprovacao → pedidos e producao → atendimento compartilhado → relatorios integrados → contas a pagar/receber e conciliacao → API e acesso pelo celular.
 API autenticada para mobile, convites/papeis, recuperacao de senha com envio real e integracoes entram em etapas proprias.
