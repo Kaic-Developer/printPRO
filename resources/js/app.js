@@ -135,6 +135,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         const keyMap = {
             'sign-facade': ['width_m', 'height_m', 1000],
             'product-frontlight-banner': ['width_m', 'height_m', 1000],
+            'product-printed-adhesive': ['width_m', 'height_m', 1000],
             'print-business-card': ['width_mm', 'height_mm', 1],
             'product-acrylic-cutout': ['width_mm', 'height_mm', 1],
             'product-presentation-folder': ['open_width_mm', 'open_height_mm', 1],
@@ -158,6 +159,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         const schema = {
             'sign-facade': { key: 'acm_thickness', values: { '3mm': 'material-acm-3mm', '4mm': 'material-acm-4mm' } },
             'product-frontlight-banner': { key: 'material', values: { 'frontlight-440g': 'material-frontlight-440g', 'frontlight-500g': 'material-frontlight-500g', backlight: 'material-backlight', mesh: 'material-mesh', 'sublimation-fabric': 'material-sublimation-fabric' } },
+            'product-printed-adhesive': { key: 'material', values: { monomeric: 'material-vinyl-monomeric', polymeric: 'material-vinyl-polymeric', perforated: 'material-vinyl-perforated', frosted: 'material-vinyl-frosted', 'static-cling': 'material-vinyl-static-cling' } },
             'print-business-card': { key: 'stock', values: { 'couche-250g': 'material-cardstock-250g', 'couche-300g': 'material-cardstock-300g', 'pvc-075': 'material-card-pvc-075' } },
             'product-presentation-folder': { key: 'stock', values: { 'couche-300g': 'material-couche-300g' } },
             'product-acrylic-cutout': { key: 'plastic_type', values: { 'acrylic-crystal': 'material-acrylic-sheet', 'acrylic-color': 'material-acrylic-sheet', ps: 'material-ps-sheet', 'expanded-pvc': 'material-expanded-pvc-sheet', polycarbonate: 'material-polycarbonate-sheet' } },

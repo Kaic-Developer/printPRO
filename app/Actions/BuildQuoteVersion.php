@@ -453,7 +453,7 @@ class BuildQuoteVersion
     private function answerDimensionsMm(QuotePreset $product, array $answers): ?array
     {
         [$widthKey, $heightKey, $scale] = match ($product->code) {
-            'sign-facade', 'product-frontlight-banner' => ['width_m', 'height_m', 'meter'],
+            'sign-facade', 'product-frontlight-banner', 'product-printed-adhesive' => ['width_m', 'height_m', 'meter'],
             'print-business-card', 'product-acrylic-cutout' => ['width_mm', 'height_mm', 'millimeter'],
             'product-presentation-folder' => ['open_width_mm', 'open_height_mm', 'millimeter'],
             default => [null, null, null],
@@ -472,6 +472,11 @@ class BuildQuoteVersion
             'product-frontlight-banner' => match ($answers['material'] ?? null) {
                 'frontlight-440g' => 'material-frontlight-440g', 'frontlight-500g' => 'material-frontlight-500g',
                 'backlight' => 'material-backlight', 'mesh' => 'material-mesh', 'sublimation-fabric' => 'material-sublimation-fabric', default => null,
+            },
+            'product-printed-adhesive' => match ($answers['material'] ?? null) {
+                'monomeric' => 'material-vinyl-monomeric', 'polymeric' => 'material-vinyl-polymeric',
+                'perforated' => 'material-vinyl-perforated', 'frosted' => 'material-vinyl-frosted',
+                'static-cling' => 'material-vinyl-static-cling', default => null,
             },
             'print-business-card' => match ($answers['stock'] ?? null) {
                 'couche-250g' => 'material-cardstock-250g', 'couche-300g' => 'material-cardstock-300g', 'pvc-075' => 'material-card-pvc-075', default => null,

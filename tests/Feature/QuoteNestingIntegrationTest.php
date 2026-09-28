@@ -25,6 +25,7 @@ class QuoteNestingIntegrationTest extends TestCase
         $product = QuotePreset::query()->where('code', $productCode)->firstOrFail();
         [$materialCode, $processCode] = match ($productCode) {
             'product-frontlight-banner' => ['material-frontlight-440g', 'process-large-format-print'],
+            'product-printed-adhesive' => ['material-vinyl-monomeric', 'process-large-format-print'],
             'product-presentation-folder' => ['material-couche-300g', 'process-sheet-print'],
             'sign-facade' => ['material-acm-3mm', 'process-welding'],
             'product-acrylic-cutout' => ['material-acrylic-cast-3mm', 'process-laser-router-cut'],
@@ -51,6 +52,7 @@ class QuoteNestingIntegrationTest extends TestCase
         [, $product, $material, $process] = $fixture;
         $answers = match ($product->code) {
             'product-frontlight-banner' => ['media_width_m' => '1', 'material' => 'frontlight-440g', 'finishing' => [], ...$answers],
+            'product-printed-adhesive' => ['width_m' => '0.5', 'height_m' => '0.25', 'material' => 'monomeric', 'lamination' => 'none', 'cut_type' => 'straight', ...$answers],
             'product-presentation-folder' => ['sheet_format' => 'a3', 'stock' => 'couche-300g', 'print_colors' => '4x0', 'pocket' => false, 'pocket_ear' => false, 'die_cut' => false, 'lamination' => false, ...$answers],
             'sign-facade' => ['structure_tube' => '20x20', 'reinforcement' => false, 'anti_rust_paint' => false, 'acm_thickness' => '3mm', 'lighting' => 'none', 'requires_munk' => false, 'requires_scaffold' => false, 'height_installation' => false, 'cnc_outsourced' => false, 'galvanizing_outsourced' => false, ...$answers],
             'product-acrylic-cutout' => ['thickness_mm' => '3', 'plastic_type' => 'acrylic-crystal', 'cut_process' => 'laser', 'thermal_bend' => false, ...$answers],
@@ -227,6 +229,17 @@ class QuoteNestingIntegrationTest extends TestCase
             ->assertSee('As medidas nominais são configuradas no catálogo da empresa.');
     }
 
+    public function test_adhesive_quote_form_renders_nesting_for_enabled_configured_vinyl(): void
+    {
+        [$user] = $this->fixture('product-printed-adhesive');
+
+        $this->actingAs($user)->get('/quotes/create')
+            ->assertOk()
+            ->assertSee('data-preset-panel="product-printed-adhesive"', false)
+            ->assertSee('data-nesting-editor', false)
+            ->assertSee('value="material-vinyl-monomeric"', false);
+    }
+
     public function test_acrylic_and_plastic_nesting_uses_the_selected_material_and_cast_thickness(): void
     {
         $fixture = $this->fixture('product-acrylic-cutout');
@@ -386,5 +399,51 @@ class QuoteNestingIntegrationTest extends TestCase
         $this->actingAs($user)->postJson('/quotes', $payload)
             ->assertUnprocessable()
             ->assertJsonValidationErrors('items.0.components');
+    }
+
+    public function test_printed_adhesive_requires_selected_media_finishing_and_application_and_can_use_roll_nesting(): void
+    {
+        $fixture = $this->fixture('product-printed-adhesive');
+        [$user, $product, $vinyl, $printing] = $fixture;
+        $application = QuotePreset::query()->where('code', 'process-adhesive-application')->firstOrFail();
+        $lamination = QuotePreset::query()->where('code', 'finish-vinyl-lamination')->firstOrFail();
+        $laminationFilm = QuotePreset::query()->where('code', 'material-vinyl-matte-lamination')->firstOrFail();
+        $plotter = QuotePreset::query()->where('code', 'process-plotter-cut')->firstOrFail();
+        $base = $this->payload($fixture, '0.5', 4, [
+            'material_type' => 'roll', 'piece_width_mm' => 500, 'piece_length_mm' => 250,
+            'material_width_mm' => 1000, 'gap_mm' => 0,
+        ], ['lamination' => 'matte', 'cut_type' => 'plotter']);
+
+        // Cada opção marcada no wizard deve possuir a respectiva linha de custo.
+        $base['items'][0]['components'] = array_merge($base['items'][0]['components'], [
+            ['code' => $application->code, 'selected' => true, 'quantity' => '1'],
+            ['code' => $lamination->code, 'selected' => true, 'quantity' => '1'],
+            ['code' => $laminationFilm->code, 'selected' => true, 'quantity' => '1'],
+            ['code' => $plotter->code, 'selected' => true, 'quantity' => '1'],
+        ]);
+        $omittedApplication = $base;
+        $omittedApplication['items'][0]['components'] = array_values(array_filter(
+            $omittedApplication['items'][0]['components'], fn (array $component): bool => $component['code'] !== $application->code,
+        ));
+        $this->actingAs($user)->postJson('/quotes', $omittedApplication)->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
+
+        foreach ([$lamination->code, $laminationFilm->code, $plotter->code] as $requiredOption) {
+            $omission = $base;
+            $omission['items'][0]['components'] = array_values(array_filter(
+                $omission['items'][0]['components'], fn (array $component): bool => $component['code'] !== $requiredOption,
+            ));
+            $this->postJson('/quotes', $omission)->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
+        }
+
+        $this->actingAs($user)->post('/quotes', $base)->assertRedirect();
+        $item = QuoteItem::query()->firstOrFail();
+        $consumedVinyl = $item->components()->where('preset_code', $vinyl->code)->firstOrFail();
+        $this->assertSame('nesting', $consumedVinyl->quantity_source);
+        $this->assertSame(500, $consumedVinyl->quantity_milli); // quatro impressões de 0,125 m² usam 0,5 m² de bobina.
+        $this->assertSame('material-vinyl-monomeric', $item->nesting['material_code']);
+        $this->assertSame(500, $item->nesting['roll_length_mm']);
+        $this->assertSame('process-adhesive-application', $item->components()->where('preset_code', $application->code)->value('preset_code'));
+        $this->assertSame('material-vinyl-matte-lamination', $item->components()->where('preset_code', $laminationFilm->code)->value('preset_code'));
+        $this->assertSame('process-large-format-print', $item->components()->where('preset_code', $printing->code)->value('preset_code'));
     }
 }

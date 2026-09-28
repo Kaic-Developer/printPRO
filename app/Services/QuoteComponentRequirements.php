@@ -13,6 +13,7 @@ final class QuoteComponentRequirements
         $required = match ($product->code) {
             'sign-facade' => $this->facade($answers),
             'product-frontlight-banner' => $this->banner($answers),
+            'product-printed-adhesive' => $this->adhesive($answers),
             'uniform-polo' => $this->polo($answers),
             'print-business-card' => $this->businessCard($answers),
             'product-presentation-folder' => $this->presentationFolder($answers),
@@ -97,6 +98,28 @@ final class QuoteComponentRequirements
             'backlight' => 'material-backlight', 'mesh' => 'material-mesh',
             'sublimation-fabric' => 'material-sublimation-fabric', default => '',
         }, 'process-large-format-print'];
+    }
+
+    /** Obriga a ficha do adesivo a refletir mídia, impressão, aplicação e opções escolhidas. */
+    private function adhesive(array $answers): array
+    {
+        $material = match ($answers['material'] ?? '') {
+            'monomeric' => 'material-vinyl-monomeric', 'polymeric' => 'material-vinyl-polymeric',
+            'perforated' => 'material-vinyl-perforated', 'frosted' => 'material-vinyl-frosted',
+            'static-cling' => 'material-vinyl-static-cling', default => '',
+        };
+        $required = [$material, 'process-large-format-print', 'process-adhesive-application'];
+        $laminationMaterial = match ($answers['lamination'] ?? 'none') {
+            'gloss' => 'material-vinyl-gloss-lamination',
+            'matte' => 'material-vinyl-matte-lamination',
+            'scratch-resistant' => 'material-vinyl-scratch-lamination',
+            default => null,
+        };
+        if ($laminationMaterial !== null) $required[] = $laminationMaterial;
+        if (($answers['lamination'] ?? 'none') !== 'none') $required[] = 'finish-vinyl-lamination';
+        if (($answers['cut_type'] ?? 'straight') === 'plotter') $required[] = 'process-plotter-cut';
+
+        return $required;
     }
 
     private function polo(array $answers): array
