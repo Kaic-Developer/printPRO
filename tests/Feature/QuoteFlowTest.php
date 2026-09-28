@@ -121,6 +121,23 @@ class QuoteFlowTest extends TestCase
         $this->assertDatabaseCount('quotes', 0);
     }
 
+    public function test_quote_rejects_multiple_mug_bases_and_printing_methods(): void
+    {
+        $user = $this->owner();
+        $product = QuotePreset::query()->where('code', 'product-mug')->firstOrFail();
+
+        $this->actingAs($user)->postJson('/quotes', ['items' => [[
+            'preset_code' => $product->code,
+            'quantity' => '10',
+            'answers' => ['material' => 'ceramic', 'print_method' => 'sublimation'],
+            'components' => collect([
+                'material-gift-mug-ceramic', 'material-gift-mug-polymer', 'process-sublimation', 'process-gift-printing',
+            ])->map(fn (string $code): array => ['code' => $code, 'selected' => true, 'quantity' => '1'])->all(),
+        ]]])->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
+
+        $this->assertDatabaseCount('quotes', 0);
+    }
+
     public function test_sanctum_api_issues_scoped_token_and_rejects_guests(): void
     {
         $user = $this->owner();

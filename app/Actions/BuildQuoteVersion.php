@@ -107,6 +107,9 @@ class BuildQuoteVersion
             if ($missing = $this->componentRequirements->missing($preset, $answers, $codes)) {
                 throw ValidationException::withMessages(["items.{$index}.components" => 'A ficha técnica não inclui todos os componentes exigidos pelas escolhas do wizard: '.implode(', ', $missing).'.']);
             }
+            if ($conflicting = $this->componentRequirements->conflicting($preset, $answers, $codes)) {
+                throw ValidationException::withMessages(["items.{$index}.components" => 'Remova os componentes incompatíveis com a opção escolhida no assistente: '.implode(', ', $conflicting).'.']);
+            }
             $componentPresets = QuotePreset::query()->whereIn('code', $codes)->get()->keyBy('code');
             $hasSuggestedMaterial = QuotePreset::query()->whereIn('code', $suggested)->where('kind', 'material')->exists();
             $hasSelectedMaterial = $componentPresets->contains(fn (QuotePreset $component) => $component->kind === 'material');

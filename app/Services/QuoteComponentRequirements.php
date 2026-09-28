@@ -18,10 +18,56 @@ final class QuoteComponentRequirements
             'product-basic-tshirt' => $this->basicTshirt($answers),
             'print-business-card' => $this->businessCard($answers),
             'product-presentation-folder' => $this->presentationFolder($answers),
+            'product-flyer' => $this->printedStock($answers, ['process-sheet-print', 'process-cutting']),
+            'product-folder-print' => $this->printedFolder($answers),
+            'product-envelopes', 'product-letterhead' => $this->printedStock($answers, $product->code === 'product-envelopes'
+                ? ['process-sheet-print', 'process-die-cut-crease']
+                : ['process-sheet-print']),
+            'product-carbonless-pads' => $this->carbonlessPads($answers),
+            'product-agenda-notebook' => $this->boundPrint($answers, true),
+            'product-menu' => $this->menu($answers),
+            'product-banner' => $this->simpleBanner($answers),
+            'product-mug' => $this->mug($answers),
+            'product-labels-roll-sheet' => $this->labels($answers),
             default => [],
         };
 
         return array_values(array_diff(array_unique($required), $selectedCodes));
+    }
+
+    /** Impede cobrar dois substratos mutuamente exclusivos para uma única escolha do wizard. */
+    public function conflicting(QuotePreset $product, array $answers, array $selectedCodes): array
+    {
+        $choiceGroup = match ($product->code) {
+            'product-mug' => ['material-gift-mug-ceramic', 'material-gift-mug-polymer', 'process-sublimation', 'process-gift-printing'],
+            'product-labels-roll-sheet' => ['material-label-roll-stock', 'material-label-sheet-stock'],
+            'product-frontlight-banner' => ['material-frontlight-440g', 'material-frontlight-500g', 'material-backlight', 'material-mesh', 'material-sublimation-fabric'],
+            'print-business-card' => ['material-cardstock-250g', 'material-cardstock-300g', 'material-card-pvc-075'],
+            'product-presentation-folder', 'product-flyer', 'product-folder-print' => ['material-cardstock-250g', 'material-couche-300g', 'material-offset-90g'],
+            'product-envelopes', 'product-letterhead' => ['material-offset-90g'],
+            'product-carbonless-pads' => ['material-carbonless-2-part', 'material-carbonless-3-part'],
+            default => [],
+        };
+        if ($choiceGroup === []) return [];
+
+        $requiredChoice = array_intersect($choiceGroup, $this->choiceRequirements($product->code, $answers));
+        $selectedChoices = array_intersect($choiceGroup, $selectedCodes);
+        return array_values(array_diff($selectedChoices, $requiredChoice));
+    }
+
+    /** Extrai apenas o insumo que representa a escolha unitária de substrato. */
+    private function choiceRequirements(string $productCode, array $answers): array
+    {
+        return match ($productCode) {
+            'product-mug' => $this->mug($answers),
+            'product-labels-roll-sheet' => [$this->labels($answers)[0]],
+            'product-frontlight-banner' => [$this->banner($answers)[0]],
+            'print-business-card' => [$this->businessCard($answers)[0]],
+            'product-presentation-folder' => [$this->presentationFolder($answers)[0]],
+            'product-flyer', 'product-folder-print', 'product-envelopes', 'product-letterhead' => [$this->printedStock($answers, [])[0]],
+            'product-carbonless-pads' => [$this->carbonlessPads($answers)[0]],
+            default => [],
+        };
     }
 
     private function facade(array $answers): array
@@ -94,11 +140,109 @@ final class QuoteComponentRequirements
 
     private function banner(array $answers): array
     {
-        return [match ($answers['material'] ?? '') {
+        $required = [match ($answers['material'] ?? '') {
             'frontlight-440g' => 'material-frontlight-440g', 'frontlight-500g' => 'material-frontlight-500g',
             'backlight' => 'material-backlight', 'mesh' => 'material-mesh',
             'sublimation-fabric' => 'material-sublimation-fabric', default => '',
         }, 'process-large-format-print'];
+        foreach ((array) ($answers['finishing'] ?? []) as $finish) {
+            if ($finish === 'hem-eyelets') $required[] = 'finish-banner-hem-eyelets';
+            if ($finish === 'rods-cord') $required[] = 'finish-banner-rods-cord';
+        }
+        return $required;
+    }
+
+    /** Stocks de papel declarados no wizard precisam corresponder ao componente precificado. */
+    private function printedStock(array $answers, array $processes): array
+    {
+        $stock = match ($answers['stock'] ?? '') {
+            'couche-250g' => 'material-cardstock-250g',
+            'couche-300g' => 'material-couche-300g',
+            'offset-90g' => 'material-offset-90g',
+            default => '',
+        };
+        return [$stock, ...$processes];
+    }
+
+    /** A ficha de folder inclui o papel escolhido e a dobra selecionada. */
+    private function printedFolder(array $answers): array
+    {
+        return [...$this->printedStock($answers, ['process-sheet-print']), 'process-folding'];
+    }
+
+    /** A via escolhida determina o estoque autocopiativo; numeração só entra quando marcada. */
+    private function carbonlessPads(array $answers): array
+    {
+        $material = match ((string) ($answers['copies'] ?? '')) {
+            '2' => 'material-carbonless-2-part',
+            '3' => 'material-carbonless-3-part',
+            default => '',
+        };
+        $required = [$material, 'process-sheet-print'];
+        if ($this->isTrue($answers['sequential_numbering'] ?? false)) $required[] = 'process-sequential-numbering';
+        return $required;
+    }
+
+    /** Cada tipo de encadernação exige seu acabamento correspondente. */
+    private function boundPrint(array $answers, bool $bindingRequired): array
+    {
+        $binding = match ($answers['binding'] ?? '') {
+            'spiral' => 'finish-binding-spiral',
+            'wire-o' => 'finish-binding-wire-o',
+            'hardcover' => 'finish-binding-hardcover',
+            'none' => null,
+            default => $bindingRequired ? '' : null,
+        };
+        $required = ['material-offset-90g', 'process-sheet-print'];
+        if ($binding !== null) $required[] = $binding;
+        return $required;
+    }
+
+    /** O cardápio exige laminação e encadernação apenas quando informadas no wizard. */
+    private function menu(array $answers): array
+    {
+        $required = ['material-couche-300g', 'process-sheet-print'];
+        if ($this->isTrue($answers['laminated'] ?? false)) $required[] = 'finish-card-lamination';
+        $binding = match ($answers['binding'] ?? 'none') {
+            'spiral' => 'finish-binding-spiral', 'wire-o' => 'finish-binding-wire-o', default => null,
+        };
+        if ($binding !== null) $required[] = $binding;
+        return $required;
+    }
+
+    /** O bastão e a cordinha são opcionais, mas obrigatórios na composição quando marcados. */
+    private function simpleBanner(array $answers): array
+    {
+        $required = ['material-frontlight-440g', 'process-large-format-print'];
+        if ($this->isTrue($answers['rods_cord'] ?? false)) $required[] = 'finish-banner-rods-cord';
+        return $required;
+    }
+
+    /** A apresentação escolhida para o rótulo determina o substrato e o corte. */
+    private function labels(array $answers): array
+    {
+        $material = match ($answers['format'] ?? '') {
+            'roll' => 'material-label-roll-stock',
+            'sheet' => 'material-label-sheet-stock',
+            default => '',
+        };
+        return [$material, 'process-label-printing', 'process-label-die-cut'];
+    }
+
+    /** O material da caneca deve coincidir com a base incluída no orçamento. */
+    private function mug(array $answers): array
+    {
+        $material = match ($answers['material'] ?? '') {
+            'ceramic' => 'material-gift-mug-ceramic',
+            'polymer' => 'material-gift-mug-polymer',
+            default => '',
+        };
+        $process = match ($answers['print_method'] ?? '') {
+            'sublimation' => 'process-sublimation',
+            'other' => 'process-gift-printing',
+            default => '',
+        };
+        return [$material, $process];
     }
 
     /** Obriga a ficha do adesivo a refletir mídia, impressão, aplicação e opções escolhidas. */
