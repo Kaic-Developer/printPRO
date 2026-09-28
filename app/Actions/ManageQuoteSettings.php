@@ -38,6 +38,8 @@ class ManageQuoteSettings
                         'production_sector' => $preset->production_sector,
                         'is_enabled' => (bool) ($row?->is_enabled ?? false),
                         'unit_cost_cents' => $row?->unit_cost_cents === null ? null : (int) $row->unit_cost_cents,
+                        'material_width_mm' => $row?->material_width_mm === null ? null : (int) $row->material_width_mm,
+                        'material_length_mm' => $row?->material_length_mm === null ? null : (int) $row->material_length_mm,
                         'wizard_key' => $preset->wizard_key,
                         'wizard_schema' => $preset->wizard_schema,
                         'suggested_components' => $preset->suggested_components,
@@ -69,21 +71,51 @@ class ManageQuoteSettings
                 if (! $preset) {
                     throw ValidationException::withMessages(['items' => 'O catálogo recebido contém um código inválido.']);
                 }
-                $enabled = filter_var($settings['is_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN);
-                $unitCost = null;
+                $existingSetting = DB::table('organization_quote_presets')
+                    ->where('organization_id', $user->organization_id)
+                    ->where('quote_preset_id', $preset->id)
+                    ->first();
+                $enabled = array_key_exists('is_enabled', $settings)
+                    ? filter_var($settings['is_enabled'], FILTER_VALIDATE_BOOLEAN)
+                    : (bool) ($existingSetting?->is_enabled ?? false);
+                $unitCost = $existingSetting?->unit_cost_cents;
                 if (in_array($preset->kind, ['material', 'process', 'finish', 'third_party'], true)) {
-                    $rawCost = trim((string) ($settings['unit_cost'] ?? ''));
-                    if ($rawCost !== '') {
-                        try {
-                            $unitCost = $this->calculator->moneyCents($rawCost);
-                        } catch (Throwable $exception) {
-                            throw ValidationException::withMessages(["items.{$code}.unit_cost" => $exception->getMessage()]);
+                    if (array_key_exists('unit_cost', $settings)) {
+                        $rawCost = trim((string) ($settings['unit_cost'] ?? ''));
+                        if ($rawCost === '') {
+                            $unitCost = null;
+                        } else {
+                            try {
+                                $unitCost = $this->calculator->moneyCents($rawCost);
+                            } catch (Throwable $exception) {
+                                throw ValidationException::withMessages(["items.{$code}.unit_cost" => $exception->getMessage()]);
+                            }
+                        }
+                    }
+                }
+                $materialWidth = $existingSetting?->material_width_mm;
+                $materialLength = $existingSetting?->material_length_mm;
+                if ($preset->kind === 'material') {
+                    foreach (['material_width_mm', 'material_length_mm'] as $dimension) {
+                        if (array_key_exists($dimension, $settings)) {
+                            $value = trim((string) ($settings[$dimension] ?? '')) === '' ? null : filter_var($settings[$dimension], FILTER_VALIDATE_INT);
+                            if ($value !== null && ($value === false || $value < 1 || $value > 10_000)) {
+                                throw ValidationException::withMessages(["items.{$code}.{$dimension}" => 'Informe dimensões cadastradas entre 1 e 10.000 mm.']);
+                            }
+                            if ($dimension === 'material_width_mm') $materialWidth = $value;
+                            else $materialLength = $value;
                         }
                     }
                 }
                 DB::table('organization_quote_presets')->updateOrInsert(
                     ['organization_id' => $user->organization_id, 'quote_preset_id' => $preset->id],
-                    ['is_enabled' => $enabled, 'unit_cost_cents' => $unitCost, 'updated_at' => now(), 'created_at' => now()],
+                    [
+                        'is_enabled' => $enabled,
+                        'unit_cost_cents' => $unitCost,
+                        ...($preset->kind === 'material' ? ['material_width_mm' => $materialWidth, 'material_length_mm' => $materialLength] : []),
+                        'updated_at' => now(),
+                        'created_at' => now(),
+                    ],
                 );
             }
 

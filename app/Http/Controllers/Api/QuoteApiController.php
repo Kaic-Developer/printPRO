@@ -22,8 +22,10 @@ class QuoteApiController extends Controller
     {
         $data = $request->validate([
             'items' => ['sometimes', 'array', 'max:300'], 'items.*' => ['array'],
-            'items.*.is_enabled' => ['required', 'boolean'],
+            'items.*.is_enabled' => ['sometimes', 'boolean'],
             'items.*.unit_cost' => ['nullable', 'string', 'max:24', 'regex:/\A(?:\d{1,3}(?:\.\d{3}){0,4}|\d{1,15})(?:,\d{1,2}|\.\d{1,2})?\z/'],
+            'items.*.material_width_mm' => ['nullable', 'integer', 'between:1,10000'],
+            'items.*.material_length_mm' => ['nullable', 'integer', 'between:1,10000'],
             'waste_percentage' => ['nullable', 'string', 'regex:/\A\d{1,7}(?:[.,]\d{1,2})?\z/'],
             'markup_multiplier' => ['nullable', 'string', 'regex:/\A\d{1,7}(?:[.,]\d{1,2})?\z/'],
         ]);
@@ -99,6 +101,15 @@ class QuoteApiController extends Controller
             'items.*.components.*.code' => ['required', 'string', 'max:96'],
             'items.*.components.*.selected' => ['nullable', 'boolean'],
             'items.*.components.*.quantity' => ['nullable', 'string', 'max:16', 'regex:/\A\d{1,9}(?:[.,]\d{1,3})?\z/'],
+            'items.*.nesting' => ['nullable', 'array'],
+            'items.*.nesting.material_code' => ['required_with:items.*.nesting', 'string', 'max:96'],
+            'items.*.nesting.material_type' => ['required_with:items.*.nesting', 'in:sheet,roll'],
+            'items.*.nesting.quantity' => ['required_with:items.*.nesting', 'integer', 'min:1', 'max:100000'],
+            'items.*.nesting.piece_width_mm' => ['required_with:items.*.nesting', 'integer', 'min:1', 'max:10000'],
+            'items.*.nesting.piece_length_mm' => ['required_with:items.*.nesting', 'integer', 'min:1', 'max:10000'],
+            'items.*.nesting.material_width_mm' => ['required_with:items.*.nesting', 'integer', 'min:1', 'max:10000'],
+            'items.*.nesting.material_length_mm' => ['required_if:items.*.nesting.material_type,sheet', 'nullable', 'integer', 'min:1', 'max:10000'],
+            'items.*.nesting.gap_mm' => ['nullable', 'integer', 'min:0', 'max:10000'],
         ]);
     }
 }

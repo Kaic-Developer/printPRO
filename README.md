@@ -28,7 +28,7 @@ O `.env` contém a chave local e as credenciais do banco. Ele é privado e não 
 - Biblioteca de presets para comunicação visual, gráfica, têxtil e brindes, com ativação e custos próprios por gráfica.
 - Wizard de orçamento com múltiplas linhas, grade de tamanhos, componentes sugeridos, versões imutáveis e cálculo em centavos.
 - Aprovação transacional que gera ordens de produção por setor sem duplicidade.
-- Estimativa retangular de aproveitamento para chapas e bobinas, sem presumir custos ou fatores comerciais.
+- Estimativa retangular por item para chapas, folhas e bobinas, usando dimensões cadastradas por gráfica e incluindo sobra de mídia no custo; sem presumir custos ou fatores comerciais.
 - API v1 com tokens Bearer Sanctum e escopos para catálogo, orçamentos e ordens de produção.
 - Controle financeiro inicial com lançamentos manuais de entradas e saídas, resumo mensal, filtro por período e gráfico com dados reais.
 - Máscara de reais nos valores financeiros, com armazenamento exato em centavos.
@@ -42,7 +42,7 @@ php artisan test
 npm run build
 ```
 
-Os testes de aplicação usam SQLite em memória e não alteram o banco local. A migration inicial também foi executada no MySQL local `printpro`.
+Os testes de aplicação usam SQLite em memória e não alteram o banco local. A migration inicial e as migrations aditivas do orçamento foram executadas no MySQL local `printpro`, sem recriar tabelas.
 
 ## Acessos e próximos módulos
 

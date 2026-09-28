@@ -12,6 +12,7 @@ use App\Models\QuoteVersion;
 use App\Models\User;
 use App\Services\QuotePricingCalculator;
 use App\Services\QuoteComponentRequirements;
+use App\Services\RectangleNestingEstimator;
 use App\Services\QuoteWizardValidator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -20,7 +21,7 @@ use Throwable;
 
 class BuildQuoteVersion
 {
-    public function __construct(private QuotePricingCalculator $pricing, private QuoteWizardValidator $wizard, private QuoteComponentRequirements $componentRequirements) {}
+    public function __construct(private QuotePricingCalculator $pricing, private QuoteWizardValidator $wizard, private QuoteComponentRequirements $componentRequirements, private RectangleNestingEstimator $nestingEstimator) {}
 
     public function create(User $user, array $data): Quote
     {
@@ -89,6 +90,9 @@ class BuildQuoteVersion
             }
             $answers = $this->wizard->validate($preset->wizard_schema ?? [], $answersInput);
             $quantityMilli = $this->lineQuantity($input, $answers, $index);
+            // Produtos cobrados por área devem reconciliar sempre com as dimensões e cópias,
+            // mesmo quando o operador escolhe informar o consumo de mídia manualmente.
+            $areaCopies = $this->assertCommercialAreaQuantity($preset, $answers, $quantityMilli, $index);
             $componentsInput = $input['components'] ?? [];
             if (! is_array($componentsInput)) {
                 throw ValidationException::withMessages(["items.{$index}.components" => 'Selecione os insumos e processos aplicáveis.']);
@@ -112,6 +116,10 @@ class BuildQuoteVersion
                 throw ValidationException::withMessages(["items.{$index}.components" => 'Confira pelo menos um material e um processo/acabamento para este produto.']);
             }
 
+            $nesting = isset($input['nesting'])
+                ? $this->nestingSnapshot($preset, $answers, $quantityMilli, $input['nesting'], $codes, $user->organization_id, $presetSettings, $index, $areaCopies)
+                : null;
+
             $costCents = 0;
             $itemComplete = true;
             $componentSnapshots = [];
@@ -121,6 +129,7 @@ class BuildQuoteVersion
                 'unit' => $preset->unit ?? 'unidade',
                 'quantity_milli' => $quantityMilli,
                 'answers' => $answers,
+                'nesting' => $nesting,
                 'production_sector' => $preset->production_sector,
             ]);
 
@@ -130,14 +139,21 @@ class BuildQuoteVersion
                 if (! $component || ! $this->enabledFor($component, $user->organization_id, $presetSettings)) {
                     throw ValidationException::withMessages(["items.{$index}.components" => 'Um dos componentes selecionados foi desativado ou não pertence a este produto.']);
                 }
-                $quantityRaw = $componentInput['quantity'] ?? null;
-                try {
-                    $componentQuantity = $this->pricing->quantityMilli(is_string($quantityRaw) || is_int($quantityRaw) ? $quantityRaw : '');
-                } catch (Throwable) {
-                    throw ValidationException::withMessages(["items.{$index}.components" => "Informe a quantidade de {$component->name} com até três casas decimais."]);
+                $componentNesting = $nesting !== null && $component->code === $nesting['material_code'] ? $nesting : null;
+                if ($componentNesting !== null) {
+                    // O nesting já retorna o consumo total arredondado para cima; não multiplique novamente pela quantidade comercial.
+                    $componentQuantity = null;
+                    $totalComponentQuantity = $componentNesting['consumed_quantity_milli'];
+                } else {
+                    $quantityRaw = $componentInput['quantity'] ?? null;
+                    try {
+                        $componentQuantity = $this->pricing->quantityMilli(is_string($quantityRaw) || is_int($quantityRaw) ? $quantityRaw : '');
+                    } catch (Throwable) {
+                        throw ValidationException::withMessages(["items.{$index}.components" => "Informe a quantidade de {$component->name} com até três casas decimais."]);
+                    }
+                    // Componentes não calculados por nesting mantêm o consumo por unidade configurado.
+                    $totalComponentQuantity = $this->pricing->multiplyMilli($componentQuantity, $quantityMilli);
                 }
-                // O wizard informa consumo por peça; o snapshot e o custo usam o consumo total da linha.
-                $totalComponentQuantity = $this->pricing->multiplyMilli($componentQuantity, $quantityMilli);
                 $tenantConfig = $component ? $presetSettings->get($component->id) : null;
                 $unitCost = $tenantConfig?->unit_cost_cents === null ? null : (int) $tenantConfig->unit_cost_cents;
                 try {
@@ -158,16 +174,18 @@ class BuildQuoteVersion
                     'unit' => $component->unit ?? 'unidade',
                     'quantity_per_unit_milli' => $componentQuantity,
                     'quantity_milli' => $totalComponentQuantity,
+                    'quantity_source' => $componentNesting === null ? 'manual' : 'nesting',
                     'unit_cost_cents' => $unitCost,
                     'cost_cents' => $componentCost,
                     'production_sector' => $component->production_sector,
+                    'nesting' => $componentNesting,
                 ];
             }
 
             $customOutsourceCents = isset($answers['outsourced_cost_cents']) ? (int) $answers['outsourced_cost_cents'] : 0;
             if ($customOutsourceCents > 0) {
                 $costCents = $this->pricing->addCents($costCents, $customOutsourceCents);
-                $componentSnapshots[] = ['code' => 'custom-third-party', 'name' => 'Serviço de terceiro informado', 'kind' => 'third_party', 'unit' => 'serviço', 'quantity_per_unit_milli' => null, 'quantity_milli' => 1000, 'unit_cost_cents' => $customOutsourceCents, 'cost_cents' => $customOutsourceCents, 'production_sector' => 'acabamento'];
+                $componentSnapshots[] = ['code' => 'custom-third-party', 'name' => 'Serviço de terceiro informado', 'kind' => 'third_party', 'unit' => 'serviço', 'quantity_per_unit_milli' => null, 'quantity_milli' => 1000, 'quantity_source' => 'manual', 'unit_cost_cents' => $customOutsourceCents, 'cost_cents' => $customOutsourceCents, 'production_sector' => 'acabamento'];
             }
 
             $pricingReady = $settings?->waste_basis_points !== null && $settings?->markup_multiplier_basis_points !== null && $settings->markup_multiplier_basis_points > 0;
@@ -194,6 +212,7 @@ class BuildQuoteVersion
                 'unit' => $preset->unit ?? 'unidade',
                 'quantity_milli' => $quantityMilli,
                 'answers' => $answers,
+                'nesting' => $nesting,
                 'components' => $componentSnapshots,
                 'cost_cents' => $itemComplete ? $costCents : null,
                 'sale_cents' => $itemSale,
@@ -245,6 +264,7 @@ class BuildQuoteVersion
                     'unit' => $component['unit'],
                     'quantity_per_unit_milli' => $component['quantity_per_unit_milli'],
                     'quantity_milli' => $component['quantity_milli'],
+                    'quantity_source' => $component['quantity_source'] ?? 'manual',
                     'unit_cost_cents' => $component['unit_cost_cents'],
                     'cost_cents' => $component['cost_cents'],
                     'production_sector' => $component['production_sector'],
@@ -276,6 +296,232 @@ class BuildQuoteVersion
         } catch (Throwable) {
             throw ValidationException::withMessages(["items.{$index}.quantity" => 'Informe a quantidade do produto.']);
         }
+    }
+
+    /** Confirma o material ativo e prova que a quantidade vendida corresponde às peças encaixadas. */
+    private function nestingSnapshot(QuotePreset $product, array $answers, int $lineQuantityMilli, mixed $nesting, array $selectedCodes, int $organizationId, $settings, int $index, ?int $areaCopies): array
+    {
+        $path = "items.{$index}.nesting";
+        if (! is_array($nesting)) {
+            throw ValidationException::withMessages([$path => 'Informe os dados de aproveitamento do material.']);
+        }
+        $materialCode = $nesting['material_code'] ?? null;
+        $materialType = $nesting['material_type'] ?? null;
+        $quantity = $nesting['quantity'] ?? null;
+        if (! is_string($materialCode) || ! in_array($materialCode, $product->suggested_components ?? [], true) || ! in_array($materialCode, $selectedCodes, true)) {
+            throw ValidationException::withMessages(["{$path}.material_code" => 'O material precisa estar sugerido e selecionado para este produto.']);
+        }
+        $expectedMaterial = $this->expectedNestingMaterial($product, $answers, $path);
+        if ($materialCode !== $expectedMaterial) {
+            throw ValidationException::withMessages(["{$path}.material_code" => 'O material do nesting não corresponde ao material escolhido na ficha do produto.']);
+        }
+        if (! is_int($quantity) && !(is_string($quantity) && preg_match('/\A\d{1,6}\z/', $quantity))) {
+            throw ValidationException::withMessages(["{$path}.quantity" => 'Informe um número inteiro de peças para o nesting.']);
+        }
+        $quantity = (int) $quantity;
+        if ($quantity < 1 || $quantity > 100_000) {
+            throw ValidationException::withMessages(["{$path}.quantity" => 'A quantidade de peças deve ser um inteiro entre 1 e 100000.']);
+        }
+
+        $material = QuotePreset::query()->where('code', $materialCode)->where('kind', 'material')->where('is_available', true)->first();
+        if (! $material || ! $this->enabledFor($material, $organizationId, $settings)) {
+            throw ValidationException::withMessages(["{$path}.material_code" => 'O material está inativo ou indisponível para esta gráfica.']);
+        }
+        $materialSettings = $settings->get($material->id);
+        $registeredWidth = (int) ($materialSettings?->material_width_mm ?? 0);
+        $registeredLength = (int) ($materialSettings?->material_length_mm ?? 0);
+        if ($registeredWidth < 1 || ($materialType === 'sheet' && $registeredLength < 1)) {
+            throw ValidationException::withMessages(["{$path}.material_width_mm" => 'Cadastre as dimensões reais deste material nas configurações do catálogo antes de estimar o aproveitamento.']);
+        }
+        if (($nesting['material_width_mm'] ?? null) != $registeredWidth
+            || ($materialType === 'sheet' && ($nesting['material_length_mm'] ?? null) != $registeredLength)) {
+            throw ValidationException::withMessages(["{$path}.material_width_mm" => 'As dimensões do nesting devem corresponder às dimensões cadastradas pela gráfica para este material.']);
+        }
+        $unit = $material->unit ?? '';
+        $compatible = match ($materialType) {
+            'sheet' => in_array($unit, ['chapa', 'folha', 'unidade', 'm²'], true),
+            'roll' => in_array($unit, ['m', 'm²'], true),
+            default => false,
+        };
+        if (! $compatible) {
+            throw ValidationException::withMessages(["{$path}.material_type" => 'A unidade do material não é compatível com chapa, bobina ou área.']);
+        }
+
+        $this->assertLineMatchesNesting($product, $answers, $lineQuantityMilli, $quantity, $nesting, $path, $areaCopies);
+        try {
+            $normalized = [
+                'material_type' => $materialType,
+                'quantity' => $quantity,
+                'piece_width_mm' => $this->nestingInteger($nesting, 'piece_width_mm', $path),
+                'piece_length_mm' => $this->nestingInteger($nesting, 'piece_length_mm', $path),
+                'material_width_mm' => $this->nestingInteger($nesting, 'material_width_mm', $path),
+                'gap_mm' => $this->nestingInteger($nesting, 'gap_mm', $path, 0),
+            ];
+            if ($materialType === 'sheet') {
+                $normalized['material_length_mm'] = $this->nestingInteger($nesting, 'material_length_mm', $path);
+            }
+            $estimate = $this->nestingEstimator->estimate($normalized);
+        } catch (\InvalidArgumentException $exception) {
+            throw ValidationException::withMessages([$path => $exception->getMessage()]);
+        }
+        if (! $estimate['fits']) {
+            throw ValidationException::withMessages([$path => 'A peça não cabe no material informado, mesmo após girar a orientação.']);
+        }
+
+        // mm equivale a milésimos de metro; converter área de mm² para milésimos de m² exige arredondar para cima.
+        $consumedMilli = match ($unit) {
+            'chapa', 'folha', 'unidade' => (int) $estimate['sheets_required'] * 1000,
+            'm' => (int) $estimate['roll_length_mm'],
+            'm²' => intdiv((int) $estimate['consumed_area_mm2'] + 999, 1000),
+            default => 0,
+        };
+        $estimate['consumed_quantity_milli'] = $consumedMilli;
+        $estimate['consumed_unit'] = $unit;
+
+        return [
+            'material_code' => $material->code,
+            'estimation_basis' => 'operator_confirmed_dimensions_and_rectangular_grid_estimate',
+            'quantity' => $quantity,
+            'material_type' => $materialType,
+            'piece_width_mm' => $normalized['piece_width_mm'],
+            'piece_length_mm' => $normalized['piece_length_mm'],
+            'material_width_mm' => $normalized['material_width_mm'],
+            'material_length_mm' => $materialType === 'sheet' ? $normalized['material_length_mm'] : null,
+            'gap_mm' => $normalized['gap_mm'],
+            ...$estimate,
+        ];
+    }
+
+    private function assertLineMatchesNesting(QuotePreset $product, array $answers, int $lineQuantityMilli, int $nestingQuantity, array $nesting, string $path, ?int $areaCopies): void
+    {
+        $grid = $answers['size_grid'] ?? null;
+        if (is_array($grid)) {
+            $selectedSizes = array_filter($grid, fn ($count): bool => is_numeric($count) && (int) $count > 0);
+            if (count($selectedSizes) > 1) {
+                throw ValidationException::withMessages(["{$path}.quantity" => 'Separe os tamanhos em itens distintos antes de calcular nesting; uma única geometria não representa uma grade mista.']);
+            }
+        }
+        if (is_array($grid)) {
+            throw ValidationException::withMessages(["{$path}.quantity" => 'Este produto possui grade de tamanhos; divida a proposta por tamanho antes de usar nesting.']);
+        }
+        $dimensions = $this->answerDimensionsMm($product, $answers);
+        if ($dimensions === null) {
+            throw ValidationException::withMessages(["{$path}.piece_width_mm" => 'Este produto não tem dimensões físicas confiáveis no wizard; use a estimativa standalone.']);
+        }
+        // A comparação final inclui a possibilidade de girar a peça na chapa/bobina.
+        $nestingWidth = $nesting['piece_width_mm'] ?? null;
+        $nestingLength = $nesting['piece_length_mm'] ?? null;
+        if ((! is_int($nestingWidth) && !(is_string($nestingWidth) && ctype_digit($nestingWidth))) || (! is_int($nestingLength) && !(is_string($nestingLength) && ctype_digit($nestingLength)))) {
+            throw ValidationException::withMessages(["{$path}.piece_width_mm" => 'As dimensões do nesting devem ser inteiras em milímetros.']);
+        }
+        $nestingWidth = (int) $nestingWidth;
+        $nestingLength = (int) $nestingLength;
+        if (!(($dimensions[0] === $nestingWidth && $dimensions[1] === $nestingLength) || ($dimensions[0] === $nestingLength && $dimensions[1] === $nestingWidth))) {
+            throw ValidationException::withMessages(["{$path}.piece_width_mm" => 'As dimensões do nesting precisam coincidir com as dimensões respondidas no produto, aceitando rotação.']);
+        }
+
+        if ($product->unit === 'm²') {
+            if ($areaCopies !== $nestingQuantity) {
+                throw ValidationException::withMessages(["{$path}.quantity" => 'A quantidade do item em m² deve corresponder às dimensões × cópias informadas no nesting.']);
+            }
+            return;
+        }
+
+        if (! in_array($product->unit, ['unidade', 'peça', 'aplicação', 'bloco'], true) || $lineQuantityMilli % 1000 !== 0 || intdiv($lineQuantityMilli, 1000) !== $nestingQuantity) {
+            throw ValidationException::withMessages(["{$path}.quantity" => 'A quantidade do item deve ser um número inteiro de unidades igual à quantidade do nesting.']);
+        }
+    }
+
+    /** Valida o preço por área independentemente de nesting; cópias precisam fechar sem arredondamento. */
+    private function assertCommercialAreaQuantity(QuotePreset $product, array $answers, int $lineQuantityMilli, int $index): ?int
+    {
+        if ($product->unit !== 'm²') return null;
+
+        $width = $this->meterMilli($answers['width_m'] ?? null);
+        $height = $this->meterMilli($answers['height_m'] ?? null);
+        if ($width === null || $height === null || $width > 10_000 || $height > 10_000 || ($width * $height) % 1000 !== 0) {
+            throw ValidationException::withMessages(["items.{$index}.quantity" => 'O preço por m² exige dimensões cuja área seja exata em milésimos.']);
+        }
+        $areaMilli = intdiv($width * $height, 1000);
+        if ($areaMilli < 1 || $lineQuantityMilli % $areaMilli !== 0) {
+            throw ValidationException::withMessages(["items.{$index}.quantity" => 'A quantidade em m² deve equivaler exatamente à área das dimensões multiplicada por um número inteiro de cópias.']);
+        }
+
+        return intdiv($lineQuantityMilli, $areaMilli);
+    }
+
+    private function answerDimensionsMm(QuotePreset $product, array $answers): ?array
+    {
+        [$widthKey, $heightKey, $scale] = match ($product->code) {
+            'sign-facade', 'product-frontlight-banner' => ['width_m', 'height_m', 'meter'],
+            'print-business-card', 'product-acrylic-cutout' => ['width_mm', 'height_mm', 'millimeter'],
+            'product-presentation-folder' => ['open_width_mm', 'open_height_mm', 'millimeter'],
+            default => [null, null, null],
+        };
+        if ($widthKey === null || $heightKey === null) return null;
+        $width = $scale === 'meter' ? $this->meterMilli($answers[$widthKey] ?? null) : $this->millimeterInteger($answers[$widthKey] ?? null);
+        $height = $scale === 'meter' ? $this->meterMilli($answers[$heightKey] ?? null) : $this->millimeterInteger($answers[$heightKey] ?? null);
+        return $width !== null && $height !== null && $width <= 10_000 && $height <= 10_000 ? [$width, $height] : null;
+    }
+
+    /** O catálogo ainda contém schemas com mais opções do que componentes precificados vinculáveis. */
+    private function expectedNestingMaterial(QuotePreset $product, array $answers, string $path): string
+    {
+        $expected = match ($product->code) {
+            'sign-facade' => match ($answers['acm_thickness'] ?? null) { '3mm' => 'material-acm-3mm', '4mm' => 'material-acm-4mm', default => null },
+            'product-frontlight-banner' => match ($answers['material'] ?? null) {
+                'frontlight-440g' => 'material-frontlight-440g', 'frontlight-500g' => 'material-frontlight-500g',
+                'backlight' => 'material-backlight', 'mesh' => 'material-mesh', 'sublimation-fabric' => 'material-sublimation-fabric', default => null,
+            },
+            'print-business-card' => match ($answers['stock'] ?? null) {
+                'couche-250g' => 'material-cardstock-250g', 'couche-300g' => 'material-cardstock-300g', 'pvc-075' => 'material-card-pvc-075', default => null,
+            },
+            'product-presentation-folder' => match ($answers['stock'] ?? null) { 'couche-300g' => 'material-couche-300g', default => null },
+            'product-acrylic-cutout' => match ($answers['plastic_type'] ?? null) {
+                'acrylic-crystal', 'acrylic-color' => match ((string) ($answers['thickness_mm'] ?? '')) {
+                    '2' => 'material-acrylic-cast-2mm', '3' => 'material-acrylic-cast-3mm', '4' => 'material-acrylic-cast-4mm',
+                    '5' => 'material-acrylic-cast-5mm', '6' => 'material-acrylic-cast-6mm', '8' => 'material-acrylic-cast-8mm',
+                    '10' => 'material-acrylic-cast-10mm', default => null,
+                },
+                'ps' => 'material-ps-sheet',
+                'expanded-pvc' => 'material-expanded-pvc-sheet',
+                'polycarbonate' => 'material-polycarbonate-sheet',
+                default => null,
+            },
+            default => null,
+        };
+        if ($expected === null) {
+            throw ValidationException::withMessages([$path => 'O produto ou material escolhido não possui vínculo de nesting confiável. Use a estimativa standalone ou consumo manual.']);
+        }
+        return $expected;
+    }
+
+    private function millimeterInteger(mixed $value): ?int
+    {
+        if (! is_string($value) && ! is_int($value)) return null;
+        $value = (string) $value;
+        if (! preg_match('/\A\d{1,7}(?:[.,]\d{1,3})?\z/', $value)) return null;
+        [$whole, $fraction] = array_pad(preg_split('/[.,]/', $value, 2), 2, '0');
+        $milli = (int) $whole * 1000 + (int) str_pad($fraction, 3, '0');
+        return $milli % 1000 === 0 ? intdiv($milli, 1000) : null;
+    }
+
+    private function meterMilli(mixed $value): ?int
+    {
+        if (! is_string($value) && ! is_int($value)) return null;
+        $value = (string) $value;
+        if (! preg_match('/\A\d{1,7}(?:[.,]\d{1,3})?\z/', $value)) return null;
+        [$whole, $fraction] = array_pad(preg_split('/[.,]/', $value, 2), 2, '0');
+        return (int) $whole * 1000 + (int) str_pad($fraction, 3, '0');
+    }
+
+    private function nestingInteger(array $nesting, string $key, string $path, ?int $default = null): int
+    {
+        $value = $nesting[$key] ?? $default;
+        if (! is_int($value) && !(is_string($value) && preg_match('/\A\d{1,6}\z/', $value))) {
+            throw ValidationException::withMessages(["{$path}.{$key}" => 'Use um número inteiro em milímetros para as dimensões do nesting.']);
+        }
+        return (int) $value;
     }
 
     private function enabledFor(QuotePreset $preset, int $organizationId, $settings): bool

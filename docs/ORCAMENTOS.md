@@ -82,6 +82,28 @@ Os schemas são declarativos (`version`, `fields`, `type`, `options`, `visible_w
 
 O estimador aceita dimensões inteiras em milímetros e testa duas grades retangulares, com e sem rotação. Em chapa, informa folhas necessárias, aproveitamento e área descartada. Em bobina, estima comprimento a consumir pela largura e orientação escolhida. Não faz nesting irregular/ótimo, não calcula sangria fora do campo de espaçamento e não inventa dimensão de mídia; o retorno deve ser tratado como estimativa.
 
+No formulário do orçamento, o nesting integrado é persistido em `quote_items.nesting` e copiado para o snapshot da versão e da O.S. O componente calculado usa `quantity_source=nesting`; os demais mantêm `quantity_source=manual`. Material, unidade, dimensões e resposta do wizard são validados no servidor. Para produtos vendidos por m², a quantidade comercial deve fechar exatamente em área por um número inteiro de cópias, mesmo quando o consumo do componente é informado manualmente.
+
+As medidas de chapa, folha ou bobina pertencem à configuração da organização em `organization_quote_presets.material_width_mm` e `material_length_mm`. O nesting integrado só pode ser usado quando as medidas nominais estiverem cadastradas no catálogo da empresa e não aceita sobrescrita no pedido. Para material comprado em m², a quantidade usa a área total de estoque consumida (largura da bobina × comprimento usado), com arredondamento para cima aos milésimos de m²; assim, sobra de borda e folga não somem do custo. O consumo automático substitui a quantidade manual daquele material e não é multiplicado novamente pelo número de peças.
+
+Exemplo do objeto integrado enviado em cada item da criação de orçamento:
+
+```json
+{
+  "nesting": {
+    "material_code": "material-frontlight-440g",
+    "material_type": "roll",
+    "quantity": 4,
+    "piece_width_mm": 500,
+    "piece_length_mm": 250,
+    "material_width_mm": 1000,
+    "gap_mm": 5
+  }
+}
+```
+
+O API devolve os dados estimados persistidos, inclusive `consumed_quantity_milli`, `consumed_unit`, aproveitamento e `quantity_source`. O preview standalone continua sem persistir nem precificar.
+
 ## Executar e validar
 
 ```powershell

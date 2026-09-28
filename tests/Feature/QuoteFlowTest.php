@@ -146,9 +146,18 @@ class QuoteFlowTest extends TestCase
         $second = $this->owner('second@example.test');
         [$product, $material] = $this->fixture($first);
         $this->actingAs($first)->put('/quote-settings', ['waste_percentage' => '5,00', 'markup_multiplier' => '1,75'])->assertRedirect();
-        $this->put('/quote-settings', ['items' => [$material->code => ['is_enabled' => '0', 'unit_cost' => '']]])->assertRedirect();
-        $this->assertDatabaseHas('organization_quote_presets', ['organization_id' => $first->organization_id, 'quote_preset_id' => $material->id, 'is_enabled' => 0, 'unit_cost_cents' => null]);
+        $this->put('/quote-settings', ['items' => [$material->code => ['is_enabled' => '1', 'unit_cost' => '12,50', 'material_width_mm' => '1220', 'material_length_mm' => '2440']]])->assertRedirect();
+        $this->put('/quote-settings', ['items' => [$material->code => ['is_enabled' => '0']]])->assertRedirect();
+        $this->assertDatabaseHas('organization_quote_presets', ['organization_id' => $first->organization_id, 'quote_preset_id' => $material->id, 'is_enabled' => 0, 'unit_cost_cents' => 1250]);
+        $this->assertDatabaseHas('organization_quote_presets', ['organization_id' => $first->organization_id, 'quote_preset_id' => $material->id, 'material_width_mm' => 1220, 'material_length_mm' => 2440]);
         $this->assertDatabaseHas('organization_quote_presets', ['organization_id' => $second->organization_id, 'quote_preset_id' => QuotePreset::where('code', 'material-acm-3mm')->value('id'), 'is_enabled' => 1]);
+        $this->assertDatabaseMissing('organization_quote_presets', ['organization_id' => $second->organization_id, 'quote_preset_id' => $material->id]);
         $this->assertDatabaseHas('organization_quote_settings', ['organization_id' => $first->organization_id, 'waste_basis_points' => 500, 'markup_multiplier_basis_points' => 17500]);
+        $this->actingAs($first)->get('/quote-settings')->assertOk()->assertSee('material_width_mm')->assertSee('1220');
+        $token = $first->createToken('settings-partial', ['catalog:write'])->plainTextToken;
+        $this->withToken($token)->patchJson('/api/v1/quote-settings', ['items' => [$material->code => ['material_width_mm' => '1000', 'material_length_mm' => '2000']]])->assertOk();
+        $this->assertDatabaseHas('organization_quote_presets', ['organization_id' => $first->organization_id, 'quote_preset_id' => $material->id, 'is_enabled' => 0, 'unit_cost_cents' => 1250, 'material_width_mm' => 1000, 'material_length_mm' => 2000]);
+        $this->actingAs($first)->put('/quote-settings', ['items' => [$material->code => ['is_enabled' => '0', 'unit_cost' => '']]])->assertRedirect();
+        $this->assertDatabaseHas('organization_quote_presets', ['organization_id' => $first->organization_id, 'quote_preset_id' => $material->id, 'unit_cost_cents' => null]);
     }
 }

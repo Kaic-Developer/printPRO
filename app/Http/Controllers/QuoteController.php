@@ -30,11 +30,22 @@ class QuoteController extends Controller
         $components = QuotePreset::query()->whereIn('kind', ['material', 'process', 'finish', 'third_party'])->where('is_available', true)->orderBy('name')->get();
         $costs = DB::table('organization_quote_presets')->where('organization_id', $request->user()->organization_id)->get()->keyBy('quote_preset_id');
         $components->each(function (QuotePreset $component) use ($costs, $enabled): void {
-            $component->setAttribute('unit_cost_cents', $costs->get($component->id)?->unit_cost_cents);
+            $configuration = $costs->get($component->id);
+            $component->setAttribute('unit_cost_cents', $configuration?->unit_cost_cents);
             $component->setAttribute('tenant_enabled', $enabled[$component->id] ?? false);
+            $component->setAttribute('material_width_mm', $configuration?->material_width_mm);
+            $component->setAttribute('material_length_mm', $configuration?->material_length_mm);
         });
+        $nestingMaterials = $components->filter(fn (QuotePreset $component): bool => $component->kind === 'material'
+            && (bool) $component->tenant_enabled
+            && $component->material_width_mm !== null
+            && in_array($component->unit, ['chapa', 'folha', 'unidade', 'm', 'm²'], true))
+            ->filter(fn (QuotePreset $component): bool => in_array($component->unit, ['m', 'm²'], true)
+                ? true
+                : $component->material_length_mm !== null)
+            ->values();
         $customers = Customer::query()->where('organization_id', $request->user()->organization_id)->orderBy('name')->get(['id', 'name']);
-        return view('quotes.create', ['customers' => $customers, 'presets' => $presets, 'components' => $components, 'pricing' => $settings->pricing($request->user())]);
+        return view('quotes.create', ['customers' => $customers, 'presets' => $presets, 'components' => $components, 'nestingMaterials' => $nestingMaterials, 'pricing' => $settings->pricing($request->user())]);
     }
 
     public function store(Request $request, BuildQuoteVersion $builder)
@@ -85,6 +96,15 @@ class QuoteController extends Controller
             'items.*.answers' => ['nullable', 'array'], 'items.*.components' => ['nullable', 'array', 'max:60'],
             'items.*.components.*.code' => ['required', 'string', 'max:96'], 'items.*.components.*.selected' => ['nullable', 'boolean'],
             'items.*.components.*.quantity' => ['nullable', 'string', 'max:16', 'regex:/\A\d{1,9}(?:[.,]\d{1,3})?\z/'],
+            'items.*.nesting' => ['nullable', 'array'],
+            'items.*.nesting.material_code' => ['required_with:items.*.nesting', 'string', 'max:96'],
+            'items.*.nesting.material_type' => ['required_with:items.*.nesting', 'in:sheet,roll'],
+            'items.*.nesting.quantity' => ['required_with:items.*.nesting', 'integer', 'min:1', 'max:100000'],
+            'items.*.nesting.piece_width_mm' => ['required_with:items.*.nesting', 'integer', 'min:1', 'max:10000'],
+            'items.*.nesting.piece_length_mm' => ['required_with:items.*.nesting', 'integer', 'min:1', 'max:10000'],
+            'items.*.nesting.material_width_mm' => ['required_with:items.*.nesting', 'integer', 'min:1', 'max:10000'],
+            'items.*.nesting.material_length_mm' => ['required_if:items.*.nesting.material_type,sheet', 'nullable', 'integer', 'min:1', 'max:10000'],
+            'items.*.nesting.gap_mm' => ['nullable', 'integer', 'min:0', 'max:10000'],
         ]);
     }
 }

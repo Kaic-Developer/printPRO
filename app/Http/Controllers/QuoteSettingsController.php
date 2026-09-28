@@ -17,8 +17,10 @@ class QuoteSettingsController extends Controller
         $validated = $request->validate([
             'items' => ['sometimes', 'array', 'max:300'],
             'items.*' => ['array'],
-            'items.*.is_enabled' => ['required', 'boolean'],
+            'items.*.is_enabled' => ['sometimes', 'boolean'],
             'items.*.unit_cost' => ['nullable', 'string', 'max:24', 'regex:/\A(?:\d{1,3}(?:\.\d{3}){0,4}|\d{1,15})(?:,\d{1,2}|\.\d{1,2})?\z/'],
+            'items.*.material_width_mm' => ['nullable', 'integer', 'between:1,10000'],
+            'items.*.material_length_mm' => ['nullable', 'integer', 'between:1,10000'],
             'waste_percentage' => ['nullable', 'string', 'regex:/\A\d{1,7}(?:[.,]\d{1,2})?\z/'],
             'markup_multiplier' => ['nullable', 'string', 'regex:/\A\d{1,7}(?:[.,]\d{1,2})?\z/'],
         ]);

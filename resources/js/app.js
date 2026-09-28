@@ -104,8 +104,176 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         });
     };
 
+    const clearNestingPreview = (editor) => {
+        editor.dataset.requestId = String(Number(editor.dataset.requestId || 0) + 1);
+        editor.querySelector('[data-nesting-result]').textContent = 'Preencha as dimensões para ver uma estimativa simplificada.';
+    };
+
+    const updateNestingAvailability = (panel) => {
+        panel.querySelectorAll('[data-nesting-editor]').forEach((editor) => {
+            const toggle = editor.querySelector('[data-nesting-toggle]');
+            const fields = editor.querySelector('[data-nesting-fields]');
+            const enabled = toggle.checked && !panel.hidden;
+            fields.hidden = !toggle.checked;
+            fields.querySelectorAll('[data-nesting-field]').forEach((control) => {
+                const isSheetLength = control.dataset.nestingField === 'material_length_mm';
+                const isSheet = editor.querySelector('[data-nesting-field="material_type"]').value === 'sheet';
+                control.disabled = !enabled || (isSheetLength && !isSheet);
+                control.required = enabled && control.dataset.schemaRequired === 'true' && (!isSheetLength || isSheet);
+            });
+            const sheetLength = editor.querySelector('[data-nesting-field="material_length_mm"]');
+            editor.querySelector('[data-nesting-sheet-length]').hidden = !enabled || editor.querySelector('[data-nesting-field="material_type"]').value !== 'sheet';
+            sheetLength.required = enabled && editor.querySelector('[data-nesting-field="material_type"]').value === 'sheet';
+            if (!toggle.checked) clearNestingPreview(editor);
+        });
+    };
+
+    const syncNestingPieceDimensions = (panel) => {
+        const editor = panel.querySelector('[data-nesting-editor]');
+        if (!editor) return;
+        const productCode = panel.dataset.presetPanel;
+        const keyMap = {
+            'sign-facade': ['width_m', 'height_m', 1000],
+            'product-frontlight-banner': ['width_m', 'height_m', 1000],
+            'print-business-card': ['width_mm', 'height_mm', 1],
+            'product-acrylic-cutout': ['width_mm', 'height_mm', 1],
+            'product-presentation-folder': ['open_width_mm', 'open_height_mm', 1],
+        };
+        const mapping = keyMap[productCode];
+        if (!mapping) return;
+        const readAnswer = (key) => panel.querySelector(`[data-wizard-field="${CSS.escape(key)}"] input, [data-wizard-field="${CSS.escape(key)}"] select` )?.value;
+        const width = Number(String(readAnswer(mapping[0]) ?? '').replace(',', '.')) * mapping[2];
+        const length = Number(String(readAnswer(mapping[1]) ?? '').replace(',', '.')) * mapping[2];
+        const widthInput = editor.querySelector('[data-nesting-field="piece_width_mm"]');
+        const lengthInput = editor.querySelector('[data-nesting-field="piece_length_mm"]');
+        widthInput.value = Number.isInteger(width) && width > 0 ? String(width) : '';
+        lengthInput.value = Number.isInteger(length) && length > 0 ? String(length) : '';
+    };
+
+    const updateNestingMaterialOptions = (panel) => {
+        const editor = panel.querySelector('[data-nesting-editor]');
+        if (!editor) return;
+        const productCode = panel.dataset.presetPanel;
+        const answer = (key) => panel.querySelector(`[data-wizard-field="${CSS.escape(key)}"] input, [data-wizard-field="${CSS.escape(key)}"] select`)?.value;
+        const schema = {
+            'sign-facade': { key: 'acm_thickness', values: { '3mm': 'material-acm-3mm', '4mm': 'material-acm-4mm' } },
+            'product-frontlight-banner': { key: 'material', values: { 'frontlight-440g': 'material-frontlight-440g', 'frontlight-500g': 'material-frontlight-500g', backlight: 'material-backlight', mesh: 'material-mesh', 'sublimation-fabric': 'material-sublimation-fabric' } },
+            'print-business-card': { key: 'stock', values: { 'couche-250g': 'material-cardstock-250g', 'couche-300g': 'material-cardstock-300g', 'pvc-075': 'material-card-pvc-075' } },
+            'product-presentation-folder': { key: 'stock', values: { 'couche-300g': 'material-couche-300g' } },
+            'product-acrylic-cutout': { key: 'plastic_type', values: { 'acrylic-crystal': 'material-acrylic-sheet', 'acrylic-color': 'material-acrylic-sheet', ps: 'material-ps-sheet', 'expanded-pvc': 'material-expanded-pvc-sheet', polycarbonate: 'material-polycarbonate-sheet' } },
+        }[productCode];
+        let allowedCode = schema ? schema.values[answer(schema.key)] : null;
+        if (productCode === 'product-acrylic-cutout' && ['acrylic-crystal', 'acrylic-color'].includes(answer('plastic_type'))) {
+            const thickness = answer('thickness_mm');
+            allowedCode = ({ '2': 'material-acrylic-cast-2mm', '3': 'material-acrylic-cast-3mm', '4': 'material-acrylic-cast-4mm', '5': 'material-acrylic-cast-5mm', '6': 'material-acrylic-cast-6mm', '8': 'material-acrylic-cast-8mm', '10': 'material-acrylic-cast-10mm' })[thickness];
+        }
+        const materialSelect = editor.querySelector('[data-nesting-field="material_code"]');
+        [...materialSelect.options].forEach((option) => {
+            if (option.value) option.hidden = option.value !== allowedCode;
+        });
+        if (materialSelect.value && materialSelect.value !== allowedCode) {
+            materialSelect.value = '';
+            editor.querySelector('[data-nesting-toggle]').checked = false;
+            activateNestingMaterial(editor);
+            clearNestingPreview(editor);
+        }
+        editor.querySelector('[data-nesting-toggle]').disabled = !allowedCode;
+        if (!allowedCode) editor.querySelector('[data-nesting-toggle]').checked = false;
+        updateNestingAvailability(panel);
+    };
+
+    const activateNestingMaterial = (editor) => {
+        const materialSelect = editor.querySelector('[data-nesting-field="material_code"]');
+        const materialCode = materialSelect.value;
+        const panel = editor.closest('[data-preset-panel]');
+        panel.querySelectorAll('[data-component-code]').forEach((row) => {
+            const wasManaged = row.classList.contains('component-nesting-managed');
+            const isManaged = Boolean(materialCode) && row.dataset.componentCode === materialCode;
+            if (wasManaged && !isManaged) {
+                const previousCheckbox = row.querySelector('[name$="[selected]"]');
+                if (previousCheckbox) previousCheckbox.checked = false;
+            }
+            row.classList.toggle('component-nesting-managed', isManaged);
+            const quantity = row.querySelector('.wizard-component-quantity');
+            if (quantity) quantity.setAttribute('aria-label', isManaged ? 'Consumo calculado pelo nesting' : 'Consumo informado manualmente');
+        });
+        if (!materialCode) return;
+        const option = materialSelect.selectedOptions[0];
+        const typeSelect = editor.querySelector('[data-nesting-field="material_type"]');
+        const unit = option.dataset.unit;
+        const type = ['m', 'm²'].includes(unit) ? 'roll' : 'sheet';
+        typeSelect.value = type;
+        editor.querySelector('[data-nesting-field="material_width_mm"]').value = option.dataset.stockWidth || '';
+        editor.querySelector('[data-nesting-field="material_length_mm"]').value = option.dataset.stockLength || '';
+        syncNestingPieceDimensions(panel);
+        updateNestingAvailability(panel);
+        const materialRow = panel.querySelector(`[data-component-code="${CSS.escape(materialCode)}"]`);
+        const checkbox = materialRow?.querySelector('[name$="[selected]"]');
+        if (checkbox) checkbox.checked = true;
+    };
+
+    const previewNesting = async (editor, line, panel) => {
+        const toggle = editor.querySelector('[data-nesting-toggle]');
+        const result = editor.querySelector('[data-nesting-result]');
+        const controls = [...editor.querySelectorAll('[data-nesting-field]')];
+        const invalid = controls.find((control) => !control.disabled && !control.checkValidity());
+        if (!toggle.checked) {
+            result.textContent = 'Ative a estimativa para informar as dimensões.';
+            return;
+        }
+        if (invalid) {
+            invalid.reportValidity();
+            return;
+        }
+
+        const requestId = String(Number(editor.dataset.requestId || 0) + 1);
+        editor.dataset.requestId = requestId;
+        result.textContent = 'Calculando estimativa…';
+        const body = new FormData();
+        const token = line.closest('form')?.querySelector('input[name="_token"]')?.value;
+        if (token) body.append('_token', token);
+        controls.filter((control) => !control.disabled).forEach((control) => {
+            body.append(control.dataset.nestingField, control.value);
+        });
+
+        const isCurrentRequest = () => line.isConnected
+            && !panel.hidden
+            && line.querySelector('[data-preset-select]').value === panel.dataset.presetPanel
+            && editor.dataset.requestId === requestId;
+        try {
+            const response = await fetch(editor.querySelector('[data-nesting-preview]').dataset.endpoint, {
+                method: 'POST',
+                body,
+                headers: { Accept: 'application/json' },
+                credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                const messages = Object.values(payload.errors ?? {}).flat();
+                throw new Error(messages[0] ?? 'Não foi possível estimar. Confira as dimensões informadas.');
+            }
+            if (!isCurrentRequest()) return;
+            const estimate = payload.estimate;
+            if (!estimate.fits) {
+                result.textContent = 'As peças não cabem no material informado, mesmo girando a orientação.';
+                return;
+            }
+            const stock = estimate.material_type === 'sheet'
+                ? `${estimate.sheets_required} chapa(s), com ${estimate.pieces_per_sheet} peça(s) por chapa`
+                : `${estimate.roll_length_mm} mm de bobina, com ${estimate.pieces_per_row} peça(s) na largura`;
+            const utilization = (estimate.utilization_basis_points / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            result.textContent = `Estimativa: ${stock}. Aproveitamento de área: ${utilization}%. Grade retangular simplificada; confirme o corte com a produção.`;
+        } catch (error) {
+            if (isCurrentRequest()) result.textContent = error.message || 'Não foi possível concluir a estimativa.';
+        }
+    };
+
     const updateSelectedPreset = (line) => {
         const selectedCode = line.querySelector('[data-preset-select]').value;
+        if (line.dataset.selectedPreset !== selectedCode) {
+            line.querySelectorAll('[data-nesting-editor]').forEach(clearNestingPreview);
+            line.dataset.selectedPreset = selectedCode;
+        }
         line.querySelectorAll('[data-preset-panel]').forEach((panel) => {
             const active = panel.dataset.presetPanel === selectedCode;
             panel.hidden = !active;
@@ -116,6 +284,8 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             if (active) {
                 updateConditionalFields(panel);
                 updateComponentSuggestions(panel);
+                updateNestingMaterialOptions(panel);
+                updateNestingAvailability(panel);
             }
         });
     };
@@ -154,8 +324,22 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             if (checkbox) checkbox.checked = component.selected === true || component.selected === 1 || component.selected === '1';
             if (componentQuantity) componentQuantity.value = component.quantity ?? '';
         });
+        const nesting = item.nesting ?? {};
+        if (Object.values(nesting).some((value) => value !== null && value !== '')) {
+            const editor = panel.querySelector('[data-nesting-editor]');
+            if (editor) {
+                editor.querySelector('[data-nesting-toggle]').checked = true;
+                Object.entries(nesting).forEach(([key, value]) => {
+                    const control = editor.querySelector(`[data-nesting-field="${CSS.escape(key)}"]`);
+                    if (control) control.value = value ?? '';
+                });
+                activateNestingMaterial(editor);
+            }
+        }
         updateConditionalFields(panel);
         updateComponentSuggestions(panel);
+        updateNestingMaterialOptions(panel);
+        updateNestingAvailability(panel);
     };
 
     const addQuoteLine = () => {
@@ -172,7 +356,41 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             if (field && panel) {
                 updateConditionalFields(panel);
                 if (event.target.matches('select')) updateComponentSuggestions(panel);
+                if (panel.querySelector('[data-nesting-editor]')) {
+                    updateNestingMaterialOptions(panel);
+                    syncNestingPieceDimensions(panel);
+                    clearNestingPreview(panel.querySelector('[data-nesting-editor]'));
+                }
             }
+            if (panel && event.target.matches('[name$="[selected]"]') && !event.target.checked) {
+                const editor = panel.querySelector('[data-nesting-editor]');
+                const selectedCode = editor?.querySelector('[data-nesting-field="material_code"]')?.value;
+                if (event.target.closest('[data-component-code]')?.dataset.componentCode === selectedCode) {
+                    editor.querySelector('[data-nesting-field="material_code"]').value = '';
+                    activateNestingMaterial(editor);
+                    clearNestingPreview(editor);
+                }
+            }
+            const nestingEditor = event.target.closest('[data-nesting-editor]');
+            if (nestingEditor && panel) {
+                if (event.target.matches('[data-nesting-toggle]')) updateNestingAvailability(panel);
+                if (event.target.matches('[data-nesting-field="material_type"]')) {
+                    updateNestingAvailability(panel);
+                    clearNestingPreview(nestingEditor);
+                }
+                if (event.target.matches('[data-nesting-field="material_code"]')) {
+                    activateNestingMaterial(nestingEditor);
+                    clearNestingPreview(nestingEditor);
+                }
+                if (event.target.matches('[data-nesting-field]:not([data-nesting-field="material_code"])')) clearNestingPreview(nestingEditor);
+            }
+        });
+        line.addEventListener('input', (event) => {
+            const nestingEditor = event.target.closest('[data-nesting-editor]');
+            if (nestingEditor && event.target.matches('[data-nesting-field]')) clearNestingPreview(nestingEditor);
+        });
+        line.querySelectorAll('[data-nesting-preview]').forEach((button) => {
+            button.addEventListener('click', () => previewNesting(button.closest('[data-nesting-editor]'), line, button.closest('[data-preset-panel]')));
         });
         line.querySelector('[data-remove-quote-line]').addEventListener('click', () => {
             line.remove();

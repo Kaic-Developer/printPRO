@@ -38,12 +38,15 @@ class ApproveQuote
                         'quantity_milli' => $item->quantity_milli,
                         'unit' => $item->unit,
                         'answers' => $item->answers,
+                        'nesting' => $item->nesting,
                     ];
                     foreach ($item->components as $component) {
                         $sector = $component->production_sector ?: $mainSector;
                         $groups[$sector]['components'][] = [
+                            'preset_code' => $component->preset_code,
                             'name' => $component->name,
                             'quantity_milli' => $component->quantity_milli,
+                            'quantity_source' => $component->quantity_source,
                             'unit' => $component->unit,
                         ];
                     }

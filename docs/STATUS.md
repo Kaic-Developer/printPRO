@@ -24,7 +24,7 @@ Fluxos implementados: organização, login, painel, clientes, catálogo comercia
 - 167 presets iniciais para comunicação visual, gráfica rápida, têxtil/uniformes e brindes/rótulos, sem custos ou preços assumidos.
 - Ativação por organização, custo unitário informado pelo usuário, perda percentual e multiplicador de markup opcionais até configuração.
 - Wizard declarativo com múltiplas linhas, schema versionado, campos condicionais e grade têxtil.
-- Estimativa de nesting retangular para chapa e bobina, indicando orientação, consumo e aproveitamento; não é nesting ótimo.
+- Estimativa integrada por item para presets de fachada, frontlight, cartão, pasta e acrílico/plásticos; perfil de largura/comprimento configurável por gráfica, snapshot preservado e consumo identificado como manual ou calculado. Chapas/folhas cobram unidades inteiras; bobinas usam comprimento ou área real consumida, sem descartar sobras. A geometria é uma grade retangular simples, não nesting ótimo.
 - Orçamentos com snapshots imutáveis, valores exatos em centavos, revisões e aprovação bloqueada quando faltam custos/fatores.
 - Aprovação gera ordens de produção por setor e a repetição do comando não duplica ordens.
 - API v1 para autenticação por token, catálogo, configuração, orçamento, nesting e ordens de produção.
@@ -33,7 +33,7 @@ Fluxos implementados: organização, login, painel, clientes, catálogo comercia
 ## Verificação e próximos passos
 
 - Os testes usam SQLite em memória e não devem executar `migrate:fresh` no banco local.
-- A migration aditiva de orçamentos foi aplicada no MySQL local e os presets foram sincronizados, sem resetar dados.
-- Validação concluída: `php artisan test` (44 testes), `npm run build`, `php artisan view:cache`, `git diff --check` e revisão cruzada.
-- A revisão identificou o consumo técnico configurável como limite conhecido: as dimensões de vários presets não viram material automaticamente até a gráfica cadastrar rendimento real. Fachada, banner e Polo já têm vínculo servidor-side das escolhas críticas aos componentes.
+- Migrations `2026_09_28_000004` e `2026_09_28_000005` aplicadas ao MySQL local; os presets foram sincronizados sem resetar dados. A migration 005 armazena dimensões nominais por material e organização.
+- Validação concluída: `php artisan test --compact` (54 testes, 354 assertions), `npm.cmd run build`, `php artisan view:cache`, `git diff --check` e revisão cruzada de domínio e UX.
+- O nesting integrado está limitado aos produtos com resposta dimensional e material vinculados no servidor. Para outros produtos, a ficha técnica ainda exige que a gráfica informe o consumo real; valores ausentes bloqueiam o preço e aprovação.
 - Pedidos com acompanhamento de chão de fábrica, atendimento compartilhado, relatórios integrados, contas a pagar/receber e aplicativo nativo continuam no roteiro.
