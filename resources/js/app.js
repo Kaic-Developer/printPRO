@@ -218,6 +218,8 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             'print-business-card': ['width_mm', 'height_mm', 1],
             'product-acrylic-cutout': ['width_mm', 'height_mm', 1],
             'product-presentation-folder': ['open_width_mm', 'open_height_mm', 1],
+            'product-folder-print': ['open_width_mm', 'open_height_mm', 1],
+            'product-flyer': ['width_mm', 'height_mm', 1],
             'product-labels-roll-sheet': ['width_mm', 'height_mm', 1],
         };
         const mapping = keyMap[productCode];
@@ -242,6 +244,8 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             'product-printed-adhesive': { key: 'material', values: { monomeric: 'material-vinyl-monomeric', polymeric: 'material-vinyl-polymeric', perforated: 'material-vinyl-perforated', frosted: 'material-vinyl-frosted', 'static-cling': 'material-vinyl-static-cling' } },
             'print-business-card': { key: 'stock', values: { 'couche-250g': 'material-cardstock-250g', 'couche-300g': 'material-cardstock-300g', 'pvc-075': 'material-card-pvc-075' } },
             'product-presentation-folder': { key: 'stock', values: { 'couche-300g': 'material-couche-300g' } },
+            'product-flyer': { key: 'stock', values: { 'couche-250g': 'material-cardstock-250g', 'couche-300g': 'material-couche-300g', 'offset-90g': 'material-offset-90g' } },
+            'product-folder-print': { key: 'stock', values: { 'couche-250g': 'material-cardstock-250g', 'couche-300g': 'material-couche-300g', 'offset-90g': 'material-offset-90g' } },
             'product-labels-roll-sheet': { key: 'format', values: { roll: 'material-label-roll-stock', sheet: 'material-label-sheet-stock' } },
             'product-acrylic-cutout': { key: 'plastic_type', values: { 'acrylic-crystal': 'material-acrylic-sheet', 'acrylic-color': 'material-acrylic-sheet', ps: 'material-ps-sheet', 'expanded-pvc': 'material-expanded-pvc-sheet', polycarbonate: 'material-polycarbonate-sheet' } },
         }[productCode];

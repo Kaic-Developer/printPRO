@@ -476,6 +476,23 @@ class BuildQuoteVersion
             || ($materialType === 'sheet' && ($nesting['material_length_mm'] ?? null) != $registeredLength)) {
             throw ValidationException::withMessages(["{$path}.material_width_mm" => 'As dimensões do nesting devem corresponder às dimensões cadastradas pela gráfica para este material.']);
         }
+        if (in_array($product->code, ['product-folder-print', 'product-presentation-folder'], true) && $materialType === 'sheet') {
+            $format = $answers['sheet_format'] ?? null;
+            // A3/SRA3 descrevem medidas físicas da folha; formato personalizado usa o perfil real do estoque cadastrado pela gráfica.
+            $standardDimensions = match ($format) {
+                'a3' => [297, 420],
+                'sra3' => [320, 450],
+                'custom' => null,
+                default => false,
+            };
+            if ($standardDimensions === false
+                || ($standardDimensions !== null && ! (
+                    ($registeredWidth === $standardDimensions[0] && $registeredLength === $standardDimensions[1])
+                    || ($registeredWidth === $standardDimensions[1] && $registeredLength === $standardDimensions[0])
+                ))) {
+                throw ValidationException::withMessages(["items.{$index}.answers.sheet_format" => 'O formato escolhido não corresponde às dimensões cadastradas para este papel. Escolha Outro formato ou ajuste o estoque no catálogo.']);
+            }
+        }
         $unit = $material->unit ?? '';
         $compatible = match ($materialType) {
             'sheet' => in_array($unit, ['chapa', 'folha', 'unidade', 'm²'], true),
@@ -594,7 +611,8 @@ class BuildQuoteVersion
         [$widthKey, $heightKey, $scale] = match ($product->code) {
             'sign-facade', 'product-frontlight-banner', 'product-printed-adhesive' => ['width_m', 'height_m', 'meter'],
             'print-business-card', 'product-acrylic-cutout' => ['width_mm', 'height_mm', 'millimeter'],
-            'product-presentation-folder' => ['open_width_mm', 'open_height_mm', 'millimeter'],
+            'product-presentation-folder', 'product-folder-print' => ['open_width_mm', 'open_height_mm', 'millimeter'],
+            'product-flyer' => ['width_mm', 'height_mm', 'millimeter'],
             'product-labels-roll-sheet' => ['width_mm', 'height_mm', 'millimeter'],
             default => [null, null, null],
         };
@@ -622,6 +640,10 @@ class BuildQuoteVersion
                 'couche-250g' => 'material-cardstock-250g', 'couche-300g' => 'material-cardstock-300g', 'pvc-075' => 'material-card-pvc-075', default => null,
             },
             'product-presentation-folder' => match ($answers['stock'] ?? null) { 'couche-300g' => 'material-couche-300g', default => null },
+            'product-flyer', 'product-folder-print' => match ($answers['stock'] ?? null) {
+                'couche-250g' => 'material-cardstock-250g', 'couche-300g' => 'material-couche-300g',
+                'offset-90g' => 'material-offset-90g', default => null,
+            },
             'product-labels-roll-sheet' => match ($answers['format'] ?? null) {
                 'roll' => 'material-label-roll-stock', 'sheet' => 'material-label-sheet-stock', default => null,
             },

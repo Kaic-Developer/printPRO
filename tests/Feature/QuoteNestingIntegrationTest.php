@@ -436,6 +436,110 @@ class QuoteNestingIntegrationTest extends TestCase
             ->assertSee('value="material-label-sheet-stock"', false);
     }
 
+    public function test_flyer_and_brochure_nesting_use_open_dimensions_and_configured_sheet_counts(): void
+    {
+        [$user] = $this->fixture('product-flyer');
+        $scenarios = [
+            ['product-flyer', 4, 'material-couche-300g', 300, 200, ['width_mm' => '300', 'height_mm' => '200', 'stock' => 'couche-300g', 'print_colors' => '4x4'], 'process-cutting', 1000],
+            ['product-folder-print', 5, 'material-couche-300g', 400, 300, ['open_width_mm' => '400', 'open_height_mm' => '300', 'closed_width_mm' => '200', 'closed_height_mm' => '300', 'sheet_format' => 'custom', 'stock' => 'couche-300g', 'print_colors' => '4x4', 'folds' => '2'], 'process-folding', 3000],
+        ];
+
+        foreach ($scenarios as [$presetCode, $quantity, $materialCode, $pieceWidth, $pieceLength, $answers, $finishCode, $expectedSheetsMilli]) {
+            $material = $this->enableMaterial($user, $materialCode);
+            DB::table('organization_quote_presets')->where('organization_id', $user->organization_id)->where('quote_preset_id', $material->id)->update([
+                'material_width_mm' => 500,
+                'material_length_mm' => 700,
+            ]);
+            $this->actingAs($user)->post('/quotes', ['items' => [[
+                'preset_code' => $presetCode,
+                'quantity' => (string) $quantity,
+                'answers' => ['quantity' => (string) $quantity, ...$answers],
+                'components' => [
+                    ['code' => $materialCode, 'selected' => true, 'quantity' => '99'],
+                    ['code' => 'process-sheet-print', 'selected' => true, 'quantity' => '1'],
+                    ['code' => $finishCode, 'selected' => true, 'quantity' => '1'],
+                ],
+                'nesting' => [
+                    'material_code' => $materialCode,
+                    'material_type' => 'sheet',
+                    'quantity' => $quantity,
+                    'piece_width_mm' => $pieceWidth,
+                    'piece_length_mm' => $pieceLength,
+                    'material_width_mm' => 500,
+                    'material_length_mm' => 700,
+                    'gap_mm' => 0,
+                ],
+            ]]])->assertRedirect();
+
+            $item = QuoteItem::query()->latest('id')->firstOrFail();
+            $component = $item->components()->where('preset_code', $materialCode)->firstOrFail();
+            $this->assertSame($expectedSheetsMilli, $component->quantity_milli);
+            $this->assertSame('folha', $component->unit);
+            $this->assertSame('nesting', $component->quantity_source);
+            $this->assertSame($pieceWidth, $item->nesting['piece_width_mm']);
+            $this->assertSame($pieceLength, $item->nesting['piece_length_mm']);
+        }
+
+        $this->actingAs($user)->get('/quotes/create')
+            ->assertOk()
+            ->assertSee('data-preset-panel="product-flyer"', false)
+            ->assertSee('data-preset-panel="product-folder-print"', false)
+            ->assertSee('data-nesting-editor', false);
+    }
+
+    public function test_folder_sheet_format_must_match_the_tenant_registered_stock_dimensions(): void
+    {
+        [$user] = $this->fixture('product-folder-print');
+        $material = $this->enableMaterial($user, 'material-couche-300g');
+        DB::table('organization_quote_presets')
+            ->where('organization_id', $user->organization_id)
+            ->where('quote_preset_id', $material->id)
+            ->update(['material_width_mm' => 320, 'material_length_mm' => 450]);
+
+        $payload = ['items' => [[
+            'preset_code' => 'product-folder-print',
+            'quantity' => '5',
+            'answers' => ['quantity' => '5', 'open_width_mm' => '400', 'open_height_mm' => '300', 'closed_width_mm' => '200', 'closed_height_mm' => '300', 'sheet_format' => 'sra3', 'stock' => 'couche-300g', 'print_colors' => '4x4', 'folds' => '2'],
+            'components' => [
+                ['code' => 'material-couche-300g', 'selected' => true, 'quantity' => '1'],
+                ['code' => 'process-sheet-print', 'selected' => true, 'quantity' => '1'],
+                ['code' => 'process-folding', 'selected' => true, 'quantity' => '1'],
+            ],
+            'nesting' => ['material_code' => 'material-couche-300g', 'material_type' => 'sheet', 'quantity' => 5, 'piece_width_mm' => 400, 'piece_length_mm' => 300, 'material_width_mm' => 320, 'material_length_mm' => 450, 'gap_mm' => 0],
+        ]]];
+
+        $this->actingAs($user)->post('/quotes', $payload)->assertRedirect();
+        $payload['items'][0]['answers']['sheet_format'] = 'a3';
+        $this->actingAs($user)->post('/quotes', $payload)->assertSessionHasErrors('items.0.answers.sheet_format');
+        $payload['items'][0]['answers']['sheet_format'] = 'custom';
+        $this->actingAs($user)->post('/quotes', $payload)->assertRedirect();
+    }
+
+    public function test_presentation_folder_validates_a3_format_against_rotated_tenant_dimensions(): void
+    {
+        [$user] = $this->fixture('product-presentation-folder');
+        $material = $this->enableMaterial($user, 'material-couche-300g');
+        DB::table('organization_quote_presets')
+            ->where('organization_id', $user->organization_id)
+            ->where('quote_preset_id', $material->id)
+            ->update(['material_width_mm' => 420, 'material_length_mm' => 297]);
+
+        $payload = ['items' => [[
+            'preset_code' => 'product-presentation-folder',
+            'quantity' => '5',
+            'answers' => ['quantity' => '5', 'open_width_mm' => '200', 'open_height_mm' => '100', 'closed_width_mm' => '100', 'closed_height_mm' => '100', 'sheet_format' => 'a3', 'stock' => 'couche-300g', 'print_colors' => '4x0', 'pocket' => false, 'pocket_ear' => false, 'die_cut' => false, 'lamination' => false],
+            'components' => [
+                ['code' => 'material-couche-300g', 'selected' => true, 'quantity' => '1'],
+                ['code' => 'process-sheet-print', 'selected' => true, 'quantity' => '1'],
+            ],
+            'nesting' => ['material_code' => 'material-couche-300g', 'material_type' => 'sheet', 'quantity' => 5, 'piece_width_mm' => 200, 'piece_length_mm' => 100, 'material_width_mm' => 420, 'material_length_mm' => 297, 'gap_mm' => 0],
+        ]]];
+
+        $this->actingAs($user)->post('/quotes', $payload)->assertRedirect();
+        $payload['items'][0]['answers']['sheet_format'] = 'sra3';
+        $this->actingAs($user)->post('/quotes', $payload)->assertSessionHasErrors('items.0.answers.sheet_format');
+    }
+
     private function enableMaterial(User $user, string $materialCode): QuotePreset
     {
         $material = QuotePreset::query()->where('code', $materialCode)->firstOrFail();
