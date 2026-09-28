@@ -10,6 +10,7 @@
 <nav aria-label="Menu principal"><span class="nav-caption">PRINCIPAL</span>
 <a href="{{ route('dashboard') }}" @class(['nav-item', 'active' => request()->routeIs('dashboard')]) @if(request()->routeIs('dashboard')) aria-current="page" @endif><x-icon/>Visão geral</a>
 <a href="{{ route('customers.index') }}" @class(['nav-item', 'active' => request()->routeIs('customers.*')]) @if(request()->routeIs('customers.*')) aria-current="page" @endif><x-icon name="users"/>Clientes</a>
+<a href="{{ route('products.index') }}" @class(['nav-item', 'active' => request()->routeIs('products.*')]) @if(request()->routeIs('products.*')) aria-current="page" @endif><x-icon name="catalog"/>Catálogo</a>
 </nav>
 <div class="sidebar-footer"><span class="eyebrow">UM BOM COMEÇO</span><p>Organize seus clientes.<br>Cuide de cada relação.</p><span class="version">WebPrintPRO · Gestão para gráficas</span></div>
 </aside>

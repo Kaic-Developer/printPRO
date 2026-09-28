@@ -1,6 +1,6 @@
 # printPRO
 
-Sistema de gestão para gráficas, feito em Laravel. Esta primeira etapa entrega uma base web responsiva, com acesso da gráfica, painel inicial e cadastro de clientes. Uma API e um aplicativo móvel ficam para etapas futuras.
+Sistema de gestão para gráficas, feito em Laravel. A base web responsiva entrega acesso da gráfica, painel, cadastro de clientes e catálogo de produtos. Uma API e um aplicativo móvel ficam para etapas futuras.
 
 ## Iniciar no Windows com XAMPP
 
@@ -23,6 +23,8 @@ O `.env` contém a chave local e as credenciais do banco. Ele é privado e não 
 - Painel com total de clientes reais e estado vazio inicial.
 - Cadastro, edição, busca e listagem paginada de clientes.
 - Isolamento de clientes por gráfica e testes contra acesso por ID de outra organização.
+- Catálogo por gráfica com busca, filtro por situação, SKU exclusivo dentro de cada gráfica, unidade configurável e preço opcional armazenado em centavos.
+- Edição e ativação/desativação de produtos, preservando registros para uso futuro em orçamentos.
 - Interface em português, adaptável a celular e desktop.
 
 ## Verificação
@@ -40,4 +42,4 @@ O proprietário administra sua própria gráfica. O cadastro e o login iniciais 
 
 O WhatsApp será um canal de atendimento dos vendedores. A proposta inicial é o administrador conectar o número da gráfica e os vendedores atenderem numa caixa compartilhada. Conversas com clientes não devem revelar dados internos do painel, do desenvolvimento ou de outras gráficas. A integração ainda não foi implementada.
 
-Próxima etapa: catálogo configurável, depois orçamento versionado, aprovação e conversão em pedido. Consulte [docs/STATUS.md](docs/STATUS.md) e [docs/ATENDIMENTO.md](docs/ATENDIMENTO.md) para decisões e pendências.
+Próxima etapa: regras comerciais configuráveis, depois orçamento versionado, aprovação e conversão em pedido. Consulte [docs/STATUS.md](docs/STATUS.md) e [docs/ATENDIMENTO.md](docs/ATENDIMENTO.md) para decisões e pendências.

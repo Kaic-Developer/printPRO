@@ -27,3 +27,18 @@ if (toggle && navigation) {
     mobile.addEventListener('change', () => setOpen(false));
     setOpen(false);
 }
+
+// Sem JS, a instrução continua visível e o servidor valida a unidade personalizada.
+const unitSelect = document.querySelector('#unit');
+const customUnit = document.querySelector('[data-custom-unit]');
+if (unitSelect && customUnit) {
+    const customInput = customUnit.querySelector('input');
+    const updateCustomUnit = () => {
+        const selected = unitSelect.value === 'custom';
+        customUnit.hidden = !selected;
+        customInput.required = selected;
+        customInput.disabled = !selected;
+    };
+    unitSelect.addEventListener('change', updateCustomUnit);
+    updateCustomUnit();
+}
