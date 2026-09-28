@@ -119,6 +119,7 @@ class BuildQuoteVersion
             $nesting = isset($input['nesting'])
                 ? $this->nestingSnapshot($preset, $answers, $quantityMilli, $input['nesting'], $codes, $user->organization_id, $presetSettings, $index, $areaCopies)
                 : null;
+            $wizardQuantities = $this->wizardCalculatedQuantities($preset, $answers, $index);
 
             $costCents = 0;
             $itemComplete = true;
@@ -144,6 +145,9 @@ class BuildQuoteVersion
                     // O nesting já retorna o consumo total arredondado para cima; não multiplique novamente pela quantidade comercial.
                     $componentQuantity = null;
                     $totalComponentQuantity = $componentNesting['consumed_quantity_milli'];
+                } elseif (array_key_exists($component->code, $wizardQuantities)) {
+                    $componentQuantity = $wizardQuantities[$component->code];
+                    $totalComponentQuantity = $this->pricing->multiplyMilli($componentQuantity, $quantityMilli);
                 } else {
                     $quantityRaw = $componentInput['quantity'] ?? null;
                     try {
@@ -174,7 +178,7 @@ class BuildQuoteVersion
                     'unit' => $component->unit ?? 'unidade',
                     'quantity_per_unit_milli' => $componentQuantity,
                     'quantity_milli' => $totalComponentQuantity,
-                    'quantity_source' => $componentNesting === null ? 'manual' : 'nesting',
+                    'quantity_source' => $componentNesting !== null ? 'nesting' : (array_key_exists($component->code, $wizardQuantities) ? 'wizard' : 'manual'),
                     'unit_cost_cents' => $unitCost,
                     'cost_cents' => $componentCost,
                     'production_sector' => $component->production_sector,
@@ -281,6 +285,46 @@ class BuildQuoteVersion
             return null;
         }
         return Customer::query()->where('organization_id', $user->organization_id)->findOrFail($customerId);
+    }
+
+    /** Calcula a área vendável por peça quando o wizard recebe dimensões explícitas da estampa. */
+    private function wizardCalculatedQuantities(QuotePreset $product, array $answers, int $index): array
+    {
+        if ($product->code !== 'product-basic-tshirt' || ! in_array($answers['personalization'] ?? null, ['dtf', 'dtg'], true)) {
+            return [];
+        }
+
+        $size = $answers['print_size'] ?? null;
+        $standardSizes = [
+            'a4' => [210, 297],
+            'a3' => [297, 420],
+            'a2' => [420, 594],
+        ];
+        $dimensions = $standardSizes[$size] ?? null;
+        $width = $this->millimeterInteger($answers['print_width_mm'] ?? null);
+        $height = $this->millimeterInteger($answers['print_height_mm'] ?? null);
+        if ($width === null || $height === null || $width < 1 || $height < 1) {
+            throw ValidationException::withMessages(["items.{$index}.answers.print_width_mm" => 'Informe dimensões inteiras e positivas para a estampa.']);
+        }
+        if ($dimensions !== null && !(($width === $dimensions[0] && $height === $dimensions[1]) || ($width === $dimensions[1] && $height === $dimensions[0]))) {
+            throw ValidationException::withMessages(["items.{$index}.answers.print_width_mm" => 'As dimensões da estampa devem corresponder ao formato padronizado escolhido.']);
+        }
+        if ($size !== 'custom_area' && $dimensions === null) {
+            throw ValidationException::withMessages(["items.{$index}.answers.print_size" => 'Selecione um tamanho padronizado ou uma área personalizada.']);
+        }
+
+        $positions = filter_var($answers['prints_per_piece'] ?? null, FILTER_VALIDATE_INT);
+        if ($positions === false || $positions < 1 || $positions > 100) {
+            throw ValidationException::withMessages(["items.{$index}.answers.prints_per_piece" => 'Informe de 1 a 100 estampas por peça.']);
+        }
+
+        // Milésimos de m² são arredondados para cima para não subestimar material e processo.
+        $areaMilliPerPiece = intdiv(($width * $height) + 999, 1000) * $positions;
+        $codes = $answers['personalization'] === 'dtf'
+            ? ['process-dtf-print-size', 'material-textile-dtf-transfer']
+            : ['process-dtg-print-size'];
+
+        return array_fill_keys($codes, $areaMilliPerPiece);
     }
 
     private function lineQuantity(array $input, array $answers, int $index): int

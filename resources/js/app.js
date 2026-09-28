@@ -104,6 +104,58 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         });
     };
 
+    const syncTextilePrintDimensions = (panel) => {
+        if (panel.dataset.presetPanel !== 'product-basic-tshirt') return;
+        const selectedSize = panel.querySelector('[data-wizard-field="print_size"] select')?.value;
+        const standardSizes = { a4: [210, 297], a3: [297, 420], a2: [420, 594] };
+        const dimensions = standardSizes[selectedSize];
+        ['print_width_mm', 'print_height_mm'].forEach((key, index) => {
+            const input = panel.querySelector(`[data-wizard-field="${key}"] input`);
+            if (!input) return;
+            if (dimensions) {
+                input.value = String(dimensions[index]);
+                input.dataset.standardValue = input.value;
+                input.readOnly = true;
+            } else {
+                if (input.dataset.standardValue && input.value === input.dataset.standardValue) input.value = '';
+                delete input.dataset.standardValue;
+                input.readOnly = selectedSize !== 'custom_area';
+            }
+        });
+    };
+
+    const updateWizardQuantityManagement = (panel) => {
+        const productCode = panel.dataset.presetPanel;
+        const personalization = panel.querySelector('[data-wizard-field="personalization"] select')?.value;
+        const managedCodes = productCode === 'product-basic-tshirt'
+            ? ({
+                dtf: ['process-dtf-print-size', 'material-textile-dtf-transfer'],
+                dtg: ['process-dtg-print-size'],
+            })[personalization] ?? []
+            : [];
+        panel.querySelectorAll('[data-component-code]').forEach((row) => {
+            const wasManaged = row.classList.contains('wizard-quantity-managed');
+            const managed = managedCodes.includes(row.dataset.componentCode);
+            const quantityInput = row.querySelector('[name$="[quantity]"]');
+            const quantityBlock = quantityInput?.closest('.wizard-component-quantity');
+            const autoLabel = row.querySelector('[data-wizard-managed-label]');
+            if (wasManaged && !managed && quantityInput) {
+                quantityInput.value = '';
+                quantityInput.disabled = false;
+                const checkbox = row.querySelector('[name$="[selected]"]');
+                if (checkbox) checkbox.checked = false;
+            }
+            if (managed && quantityInput) {
+                quantityInput.disabled = true;
+                const checkbox = row.querySelector('[name$="[selected]"]');
+                if (checkbox) checkbox.checked = true;
+            }
+            if (quantityBlock) quantityBlock.hidden = managed;
+            if (autoLabel) autoLabel.hidden = !managed;
+            row.classList.toggle('wizard-quantity-managed', managed);
+        });
+    };
+
     const clearNestingPreview = (editor) => {
         editor.dataset.requestId = String(Number(editor.dataset.requestId || 0) + 1);
         editor.querySelector('[data-nesting-result]').textContent = 'Preencha as dimensões para ver uma estimativa simplificada.';
@@ -286,6 +338,8 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             if (active) {
                 updateConditionalFields(panel);
                 updateComponentSuggestions(panel);
+                syncTextilePrintDimensions(panel);
+                updateWizardQuantityManagement(panel);
                 updateNestingMaterialOptions(panel);
                 updateNestingAvailability(panel);
             }
@@ -340,6 +394,8 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         }
         updateConditionalFields(panel);
         updateComponentSuggestions(panel);
+        syncTextilePrintDimensions(panel);
+        updateWizardQuantityManagement(panel);
         updateNestingMaterialOptions(panel);
         updateNestingAvailability(panel);
     };
@@ -357,6 +413,8 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             const panel = event.target.closest('[data-preset-panel]');
             if (field && panel) {
                 updateConditionalFields(panel);
+                syncTextilePrintDimensions(panel);
+                updateWizardQuantityManagement(panel);
                 if (event.target.matches('select')) updateComponentSuggestions(panel);
                 if (panel.querySelector('[data-nesting-editor]')) {
                     updateNestingMaterialOptions(panel);

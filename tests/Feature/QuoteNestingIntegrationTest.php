@@ -240,6 +240,55 @@ class QuoteNestingIntegrationTest extends TestCase
             ->assertSee('value="material-vinyl-monomeric"', false);
     }
 
+    public function test_basic_tshirt_wizard_exposes_standard_and_custom_print_dimensions_and_calculates_dtf_and_dtg_area(): void
+    {
+        $fixture = $this->fixture('product-basic-tshirt');
+        [$user] = $fixture;
+        $this->actingAs($user)->get('/quotes/create')
+            ->assertOk()
+            ->assertSee('data-wizard-field="print_size"', false)
+            ->assertSee('value="custom_area"', false)
+            ->assertSee('data-wizard-managed-label', false);
+
+        $dtf = $this->payload($fixture, '3', 3, [], [
+            'size_grid' => ['P' => 2, 'M' => 1], 'fabric' => 'polyester', 'personalization' => 'dtf',
+            'print_size' => 'a4', 'prints_per_piece' => '2', 'print_width_mm' => '210', 'print_height_mm' => '297',
+        ]);
+        unset($dtf['items'][0]['nesting']);
+        $dtf['items'][0]['components'] = [
+            ['code' => 'material-polyester', 'selected' => true, 'quantity' => '0.45'],
+            ['code' => 'process-dtf-print-size', 'selected' => true, 'quantity' => '99'],
+            ['code' => 'material-textile-dtf-transfer', 'selected' => true, 'quantity' => '99'],
+        ];
+        $this->actingAs($user)->post('/quotes', $dtf)->assertRedirect();
+        $dtfItem = QuoteItem::query()->latest('id')->firstOrFail();
+        foreach (['process-dtf-print-size', 'material-textile-dtf-transfer'] as $code) {
+            $component = $dtfItem->components()->where('preset_code', $code)->firstOrFail();
+            $this->assertSame(126, $component->quantity_per_unit_milli); // A4 arredondado para cima por posição, duas posições por camiseta.
+            $this->assertSame(378, $component->quantity_milli); // três camisetas na grade.
+            $this->assertSame('wizard', $component->quantity_source);
+        }
+
+        $dtg = $this->payload($fixture, '1', 1, [], [
+            'size_grid' => ['P' => 1], 'fabric' => 'dryfit', 'personalization' => 'dtg',
+            'print_size' => 'custom_area', 'prints_per_piece' => '2', 'print_width_mm' => '350', 'print_height_mm' => '200',
+        ]);
+        unset($dtg['items'][0]['nesting']);
+        $dtg['items'][0]['components'] = [
+            ['code' => 'material-dryfit', 'selected' => true, 'quantity' => '0.4'],
+            ['code' => 'process-dtg-print-size', 'selected' => true, 'quantity' => '99'],
+            ['code' => 'material-textile-dtg-ink', 'selected' => true, 'quantity' => '0.01'],
+        ];
+        $this->actingAs($user)->post('/quotes', $dtg)->assertRedirect();
+        $dtgItem = QuoteItem::query()->latest('id')->firstOrFail();
+        $dtgProcess = $dtgItem->components()->where('preset_code', 'process-dtg-print-size')->firstOrFail();
+        $this->assertSame(140, $dtgProcess->quantity_per_unit_milli); // 350 × 200 mm, duas estampas por peça.
+        $this->assertSame('wizard', $dtgProcess->quantity_source);
+        $ink = $dtgItem->components()->where('preset_code', 'material-textile-dtg-ink')->firstOrFail();
+        $this->assertSame('manual', $ink->quantity_source); // O consumo de tinta varia e não é deduzido da área.
+        $this->assertSame(10, $ink->quantity_per_unit_milli);
+    }
+
     public function test_acrylic_and_plastic_nesting_uses_the_selected_material_and_cast_thickness(): void
     {
         $fixture = $this->fixture('product-acrylic-cutout');
