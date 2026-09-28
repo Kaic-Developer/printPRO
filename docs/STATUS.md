@@ -21,7 +21,7 @@ Fluxos implementados: organização, login, painel, clientes, catálogo comercia
 - Cadastro da gráfica e proprietário, login com limite de tentativas e logout.
 - Clientes e catálogo comercial isolados por organização.
 - Financeiro inicial com entradas/saídas, valores em centavos, filtro mensal e gráfico baseado em dados reais.
-- 167 presets iniciais para comunicação visual, gráfica rápida, têxtil/uniformes e brindes/rótulos, sem custos ou preços assumidos.
+- 169 presets iniciais para comunicação visual, gráfica rápida, têxtil/uniformes e brindes/rótulos, sem custos ou preços assumidos.
 - Ativação por organização, custo unitário informado pelo usuário, perda percentual e multiplicador de markup opcionais até configuração.
 - Wizard declarativo com múltiplas linhas, schema versionado, campos condicionais e grade têxtil.
 - Estimativa integrada por item para presets de fachada, frontlight, adesivo impresso, cartão, pasta e acrílico/plásticos; perfil de largura/comprimento configurável por gráfica, snapshot preservado e consumo identificado como manual ou calculado. Chapas/folhas cobram unidades inteiras; bobinas usam comprimento ou área real consumida, sem descartar sobras. A geometria é uma grade retangular simples, não nesting ótimo.
@@ -34,6 +34,6 @@ Fluxos implementados: organização, login, painel, clientes, catálogo comercia
 
 - Os testes usam SQLite em memória e não devem executar `migrate:fresh` no banco local.
 - Migrations `2026_09_28_000004` e `2026_09_28_000005` aplicadas ao MySQL local; os presets foram sincronizados sem resetar dados. A migration 005 armazena dimensões nominais por material e organização.
-- Validação concluída: `php artisan test --compact` (58 testes, 396 assertions), `npm.cmd run build`, `php artisan view:cache`, `git diff --check` e revisão cruzada de domínio e UX.
+- Validação concluída: `php artisan test --compact` (59 testes, 406 assertions), `npm.cmd run build`, `php artisan view:cache`, `git diff --check` e revisão cruzada de domínio e UX.
 - O nesting integrado está limitado aos produtos com resposta dimensional e material vinculados no servidor. Para outros produtos, a ficha técnica ainda exige que a gráfica informe o consumo real; valores ausentes bloqueiam o preço e aprovação.
 - Pedidos com acompanhamento de chão de fábrica, atendimento compartilhado, relatórios integrados, contas a pagar/receber e aplicativo nativo continuam no roteiro.

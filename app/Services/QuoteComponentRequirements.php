@@ -15,6 +15,7 @@ final class QuoteComponentRequirements
             'product-frontlight-banner' => $this->banner($answers),
             'product-printed-adhesive' => $this->adhesive($answers),
             'uniform-polo' => $this->polo($answers),
+            'product-basic-tshirt' => $this->basicTshirt($answers),
             'print-business-card' => $this->businessCard($answers),
             'product-presentation-folder' => $this->presentationFolder($answers),
             default => [],
@@ -135,6 +136,27 @@ final class QuoteComponentRequirements
             'textile-vinyl' => ['process-textile-vinyl', 'material-textile-vinyl'], default => [],
         };
         return [$fabric, ...$process];
+    }
+
+    /** Relaciona todas as técnicas da camiseta aos insumos técnicos próprios de cada processo. */
+    private function basicTshirt(array $answers): array
+    {
+        $fabric = match ($answers['fabric'] ?? '') {
+            'cotton' => 'material-cotton-menegotti',
+            'polyester' => 'material-polyester',
+            'dryfit' => 'material-dryfit',
+            default => '',
+        };
+        $personalization = match ($answers['personalization'] ?? '') {
+            'silk-screen' => ['process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink'],
+            'dtf' => ['process-dtf-print-size', 'material-textile-dtf-transfer'],
+            'dtg' => ['process-dtg-print-size', 'material-textile-dtg-ink'],
+            'sublimation' => ['process-sublimation', 'material-sublimation-paper', 'material-sublimation-ink'],
+            'textile-vinyl' => ['process-textile-vinyl', 'material-textile-vinyl'],
+            default => [],
+        };
+
+        return [$fabric, ...$personalization];
     }
 
     private function isTrue(mixed $value): bool
