@@ -12,7 +12,7 @@
         $type = data_get($field, 'type', 'text');
         $name = 'items[__INDEX__][answers]['.$key.']';
         $id = 'wizard-__INDEX__-'.$key;
-        $required = (bool) data_get($field, 'required', false) || data_get($field, 'visible_when') !== null;
+        $required = (bool) data_get($field, 'required', false);
         if ($type === 'quantity' || $key === 'quantity') return;
         echo '<div class="field wizard-field" data-wizard-field="'.e($key).'"';
         if ($condition = data_get($field, 'visible_when')) {

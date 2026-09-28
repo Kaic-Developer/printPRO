@@ -24,7 +24,8 @@ final class QuoteWizardValidator
             if (! $visible) {
                 continue;
             }
-            $required = (($field['required'] ?? false) || isset($field['visible_when'])) ? 'required' : 'nullable';
+            // A condicao controla somente a exibicao; o schema decide se a resposta e obrigatoria.
+            $required = ($field['required'] ?? false) ? 'required' : 'nullable';
             $rules[$key] = match ($field['type']) {
                 'boolean' => [$required, 'boolean'],
                 'integer' => [$required, 'integer', 'min:'.($field['min'] ?? 0), 'max:'.($field['max'] ?? 1000000)],

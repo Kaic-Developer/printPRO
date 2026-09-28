@@ -29,6 +29,7 @@ final class QuoteComponentRequirements
             'product-banner' => $this->simpleBanner($answers),
             'product-mug' => $this->mug($answers),
             'product-labels-roll-sheet' => $this->labels($answers),
+            'product-workwear', 'product-sweatshirt', 'product-apron', 'product-cap' => $this->textileGarment($product->code, $answers),
             default => [],
         };
 
@@ -46,6 +47,12 @@ final class QuoteComponentRequirements
             'product-presentation-folder', 'product-flyer', 'product-folder-print' => ['material-cardstock-250g', 'material-couche-300g', 'material-offset-90g'],
             'product-envelopes', 'product-letterhead' => ['material-offset-90g'],
             'product-carbonless-pads' => ['material-carbonless-2-part', 'material-carbonless-3-part'],
+            'uniform-polo' => ['material-piquet', 'material-dryfit', 'material-cotton-menegotti', 'process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink', 'process-computerized-embroidery', 'third-party-embroidery-matrix', 'process-dtf-print-size', 'material-textile-dtf-transfer', 'process-textile-vinyl', 'material-textile-vinyl'],
+            'product-basic-tshirt' => ['material-cotton-menegotti', 'material-polyester', 'material-dryfit', 'process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink', 'process-dtf-print-size', 'material-textile-dtf-transfer', 'process-dtg-print-size', 'material-textile-dtg-ink', 'process-sublimation', 'material-sublimation-paper', 'material-sublimation-ink', 'process-textile-vinyl', 'material-textile-vinyl'],
+            'product-workwear' => $this->textileChoiceGroup('workwear'),
+            'product-sweatshirt' => $this->textileChoiceGroup('sweatshirt'),
+            'product-apron' => $this->textileChoiceGroup('apron'),
+            'product-cap' => $this->textileChoiceGroup('cap'),
             default => [],
         };
         if ($choiceGroup === []) return [];
@@ -66,6 +73,9 @@ final class QuoteComponentRequirements
             'product-presentation-folder' => [$this->presentationFolder($answers)[0]],
             'product-flyer', 'product-folder-print', 'product-envelopes', 'product-letterhead' => [$this->printedStock($answers, [])[0]],
             'product-carbonless-pads' => [$this->carbonlessPads($answers)[0]],
+            'uniform-polo' => $this->polo($answers),
+            'product-basic-tshirt' => $this->basicTshirt($answers),
+            'product-workwear', 'product-sweatshirt', 'product-apron', 'product-cap' => $this->textileGarment($productCode, $answers),
             default => [],
         };
     }
@@ -245,6 +255,52 @@ final class QuoteComponentRequirements
         return [$material, $process];
     }
 
+    /** Vincula tecido/base e técnica a todos os componentes próprios da peça têxtil. */
+    private function textileGarment(string $productCode, array $answers): array
+    {
+        if (($answers['personalization'] ?? null) === 'silk-screen') {
+            $this->validateSilkColors($answers);
+        }
+        $this->validateEmbroideryMatrixAnswer($answers);
+
+        $base = match ($productCode) {
+            'product-workwear' => 'material-brim',
+            'product-sweatshirt' => 'material-sweatshirt-fabric',
+            'product-apron' => match ($answers['fabric'] ?? '') {
+                'brim' => 'material-brim', 'cotton' => 'material-cotton-menegotti',
+                'polyester' => 'material-polyester', default => '',
+            },
+            'product-cap' => 'material-cap-base',
+            default => '',
+        };
+        $technique = match ($answers['personalization'] ?? '') {
+            'silk-screen' => ['process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink'],
+            'dtf' => ['process-dtf', 'material-textile-dtf-transfer'],
+            'embroidery' => ['process-computerized-embroidery'],
+            'textile-vinyl' => ['process-textile-vinyl', 'material-textile-vinyl'],
+            default => [],
+        };
+        if (($answers['personalization'] ?? null) === 'embroidery' && $this->isTrue($answers['embroidery_matrix'] ?? false)) {
+            $technique[] = 'third-party-embroidery-matrix';
+        }
+        return [$base, ...$technique];
+    }
+
+    /** Alternativas de tecido e técnica impedem cobranças que não correspondem à peça configurada. */
+    private function textileChoiceGroup(string $productCode): array
+    {
+        $bases = match ($productCode) {
+            'workwear' => ['material-brim'],
+            'sweatshirt' => ['material-sweatshirt-fabric'],
+            'apron' => ['material-brim', 'material-cotton-menegotti', 'material-polyester'],
+            'cap' => ['material-cap-base'],
+            default => [],
+        };
+        return [...$bases, 'process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink',
+            'process-dtf', 'material-textile-dtf-transfer', 'process-computerized-embroidery', 'third-party-embroidery-matrix',
+            'process-textile-vinyl', 'material-textile-vinyl'];
+    }
+
     /** Obriga a ficha do adesivo a refletir mídia, impressão, aplicação e opções escolhidas. */
     private function adhesive(array $answers): array
     {
@@ -269,22 +325,58 @@ final class QuoteComponentRequirements
 
     private function polo(array $answers): array
     {
+        if (($answers['personalization'] ?? null) === 'silk-screen') {
+            $this->validateSilkColors($answers);
+        }
+        $this->validateEmbroideryMatrixAnswer($answers);
+
         $fabric = match ($answers['fabric'] ?? '') {
             'piquet' => 'material-piquet', 'dryfit' => 'material-dryfit',
             'cotton' => 'material-cotton-menegotti', default => '',
         };
         $process = match ($answers['personalization'] ?? '') {
             'silk-screen' => ['process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink'],
-            'embroidery' => ['process-computerized-embroidery', 'third-party-embroidery-matrix'],
+            'embroidery' => ['process-computerized-embroidery'],
             'dtf' => ['process-dtf-print-size', 'material-textile-dtf-transfer'],
             'textile-vinyl' => ['process-textile-vinyl', 'material-textile-vinyl'], default => [],
         };
+        if (($answers['personalization'] ?? null) === 'embroidery' && $this->isTrue($answers['embroidery_matrix'] ?? false)) {
+            $process[] = 'third-party-embroidery-matrix';
+        }
         return [$fabric, ...$process];
+    }
+
+    /** Confere cores inteiras e não negativas antes de exigir os insumos de serigrafia. */
+    private function validateSilkColors(array $answers): void
+    {
+        $counts = [];
+        foreach (['silk_front_colors', 'silk_back_colors'] as $field) {
+            $value = $answers[$field] ?? null;
+            $integer = filter_var($value, FILTER_VALIDATE_INT);
+            if ($integer === false || $integer < 0 || $integer > 1000) {
+                throw ValidationException::withMessages(["answers.{$field}" => 'Informe uma quantidade inteira entre zero e mil cores.']);
+            }
+            $counts[] = $integer;
+        }
+        if (array_sum($counts) < 1) {
+            throw ValidationException::withMessages(['answers.silk_front_colors' => 'Informe ao menos uma cor na frente ou no verso para calcular a serigrafia.']);
+        }
+    }
+
+    /** O operador precisa dizer explicitamente se a matriz já existe ou deve ser produzida. */
+    private function validateEmbroideryMatrixAnswer(array $answers): void
+    {
+        if (($answers['personalization'] ?? null) === 'embroidery' && ! array_key_exists('embroidery_matrix', $answers)) {
+            throw ValidationException::withMessages(['answers.embroidery_matrix' => 'Informe se a matriz de bordado já existe ou precisa ser produzida.']);
+        }
     }
 
     /** Relaciona todas as técnicas da camiseta aos insumos técnicos próprios de cada processo. */
     private function basicTshirt(array $answers): array
     {
+        if (($answers['personalization'] ?? null) === 'silk-screen') {
+            $this->validateSilkColors($answers);
+        }
         $fabric = match ($answers['fabric'] ?? '') {
             'cotton' => 'material-cotton-menegotti',
             'polyester' => 'material-polyester',

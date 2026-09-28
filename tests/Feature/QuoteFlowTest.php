@@ -138,6 +138,82 @@ class QuoteFlowTest extends TestCase
         $this->assertDatabaseCount('quotes', 0);
     }
 
+    public function test_workwear_quote_can_reuse_an_existing_embroidery_matrix(): void
+    {
+        $user = $this->owner();
+        $product = QuotePreset::query()->where('code', 'product-workwear')->firstOrFail();
+
+        $this->actingAs($user)->post('/quotes', ['items' => [[
+            'preset_code' => $product->code,
+            'quantity' => '1',
+            'answers' => [
+                'garment' => 'lab_coat', 'size_grid' => ['M' => 1], 'personalization' => 'embroidery',
+                'logo_width_cm' => '6', 'logo_height_cm' => '4', 'estimated_stitches' => '2500', 'embroidery_matrix' => false,
+            ],
+            'components' => [
+                ['code' => 'material-brim', 'selected' => true, 'quantity' => '1'],
+                ['code' => 'process-computerized-embroidery', 'selected' => true, 'quantity' => '1'],
+            ],
+        ]]])->assertRedirect();
+
+        $this->assertDatabaseCount('quotes', 1);
+        $this->assertDatabaseCount('quote_versions', 1);
+    }
+
+    public function test_workwear_api_rejects_omitted_matrix_choice_and_negative_silk_colors(): void
+    {
+        $user = $this->owner();
+        $product = QuotePreset::query()->where('code', 'product-workwear')->firstOrFail();
+        $components = collect(['material-brim', 'process-computerized-embroidery'])
+            ->map(fn (string $code): array => ['code' => $code, 'selected' => true, 'quantity' => '1'])->all();
+
+        $this->actingAs($user)->postJson('/quotes', ['items' => [[
+            'preset_code' => $product->code,
+            'quantity' => '1',
+            'answers' => [
+                'garment' => 'lab_coat', 'size_grid' => ['M' => 1], 'personalization' => 'embroidery',
+                'logo_width_cm' => '6', 'logo_height_cm' => '4', 'estimated_stitches' => '2500',
+            ],
+            'components' => $components,
+        ]]])->assertUnprocessable();
+        $this->assertDatabaseCount('quotes', 0);
+
+        $this->postJson('/quotes', ['items' => [[
+            'preset_code' => $product->code,
+            'quantity' => '1',
+            'answers' => [
+                'garment' => 'lab_coat', 'size_grid' => ['M' => 1], 'personalization' => 'silk-screen',
+                'silk_front_colors' => -1, 'silk_back_colors' => 2,
+            ],
+            'components' => collect(['material-brim', 'process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink'])
+                ->map(fn (string $code): array => ['code' => $code, 'selected' => true, 'quantity' => '1'])->all(),
+        ]]])->assertUnprocessable();
+
+        $this->assertDatabaseCount('quotes', 0);
+    }
+
+    public function test_basic_tshirt_silk_api_requires_valid_front_or_back_color_counts(): void
+    {
+        $user = $this->owner();
+        $product = QuotePreset::query()->where('code', 'product-basic-tshirt')->firstOrFail();
+        $components = collect(['material-cotton-menegotti', 'process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink'])
+            ->map(fn (string $code): array => ['code' => $code, 'selected' => true, 'quantity' => '1'])->all();
+        $item = [
+            'preset_code' => $product->code,
+            'quantity' => '1',
+            'answers' => ['size_grid' => ['M' => 1], 'fabric' => 'cotton', 'personalization' => 'silk-screen'],
+            'components' => $components,
+        ];
+
+        $this->actingAs($user)->postJson('/quotes', ['items' => [$item]])->assertUnprocessable();
+        $this->assertDatabaseCount('quotes', 0);
+
+        $item['answers']['silk_front_colors'] = 2;
+        $item['answers']['silk_back_colors'] = 0;
+        $this->post('/quotes', ['items' => [$item]])->assertRedirect();
+        $this->assertDatabaseCount('quotes', 1);
+    }
+
     public function test_sanctum_api_issues_scoped_token_and_rejects_guests(): void
     {
         $user = $this->owner();

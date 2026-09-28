@@ -22,9 +22,21 @@ class QuoteComponentRequirementsTest extends TestCase
 
         foreach ($scenarios as [$fabric, $personalization, $expected]) {
             $answers = ['fabric' => $fabric, 'personalization' => $personalization];
+            if ($personalization === 'silk-screen') {
+                $answers['silk_front_colors'] = 2;
+                $answers['silk_back_colors'] = 0;
+            }
             $this->assertEqualsCanonicalizing($expected, $requirements->missing($preset, $answers, []));
             $this->assertSame([], $requirements->missing($preset, $answers, $expected));
+            $this->assertSame([], $requirements->conflicting($preset, $answers, $expected));
         }
+        $this->assertSame(
+            ['process-textile-vinyl', 'material-textile-vinyl'],
+            $requirements->conflicting($preset, ['fabric' => 'cotton', 'personalization' => 'silk-screen', 'silk_front_colors' => 2, 'silk_back_colors' => 0], [
+                'material-cotton-menegotti', 'process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink',
+                'process-textile-vinyl', 'material-textile-vinyl',
+            ]),
+        );
     }
 
     public function test_printed_items_require_the_selected_stock_and_production_steps(): void
@@ -128,5 +140,88 @@ class QuoteComponentRequirementsTest extends TestCase
             ['material' => 'ceramic', 'print_method' => 'sublimation'],
             ['material-gift-mug-ceramic', 'process-sublimation'],
         ));
+    }
+
+    public function test_apparel_presets_require_the_selected_base_and_customization_supplies(): void
+    {
+        $requirements = new QuoteComponentRequirements;
+        $cases = [
+            ['product-workwear', ['personalization' => 'silk-screen', 'silk_front_colors' => 2, 'silk_back_colors' => 0], ['material-brim', 'process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink']],
+            ['product-sweatshirt', ['personalization' => 'dtf'], ['material-sweatshirt-fabric', 'process-dtf', 'material-textile-dtf-transfer']],
+            ['product-apron', ['fabric' => 'polyester', 'personalization' => 'embroidery', 'embroidery_matrix' => true], ['material-polyester', 'process-computerized-embroidery', 'third-party-embroidery-matrix']],
+            ['product-cap', ['personalization' => 'textile-vinyl'], ['material-cap-base', 'process-textile-vinyl', 'material-textile-vinyl']],
+        ];
+
+        foreach ($cases as [$code, $answers, $expected]) {
+            $preset = new QuotePreset(['code' => $code]);
+            $this->assertEqualsCanonicalizing($expected, $requirements->missing($preset, $answers, []));
+            $this->assertSame([], $requirements->conflicting($preset, $answers, $expected));
+        }
+        $this->assertEqualsCanonicalizing(
+            ['material-polyester', 'process-computerized-embroidery'],
+            $requirements->missing(new QuotePreset(['code' => 'product-apron']), ['fabric' => 'polyester', 'personalization' => 'embroidery', 'embroidery_matrix' => false], []),
+        );
+        $this->assertSame(
+            ['process-computerized-embroidery'],
+            $requirements->conflicting(
+                new QuotePreset(['code' => 'product-apron']),
+                ['fabric' => 'polyester', 'personalization' => 'dtf'],
+                ['material-polyester', 'process-computerized-embroidery', 'process-dtf', 'material-textile-dtf-transfer'],
+            ),
+        );
+    }
+
+    public function test_polo_embroidery_matrix_is_only_costed_when_requested(): void
+    {
+        $requirements = new QuoteComponentRequirements;
+        $polo = new QuotePreset(['code' => 'uniform-polo']);
+        $base = ['material-piquet', 'process-computerized-embroidery'];
+
+        $this->assertEqualsCanonicalizing($base, $requirements->missing($polo, ['fabric' => 'piquet', 'personalization' => 'embroidery', 'embroidery_matrix' => false], []));
+        $this->assertEqualsCanonicalizing([...$base, 'third-party-embroidery-matrix'], $requirements->missing($polo, ['fabric' => 'piquet', 'personalization' => 'embroidery', 'embroidery_matrix' => true], []));
+    }
+
+    public function test_textile_silk_screen_requires_at_least_one_print_color(): void
+    {
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+
+        (new QuoteComponentRequirements)->missing(
+            new QuotePreset(['code' => 'product-workwear']),
+            ['personalization' => 'silk-screen', 'silk_front_colors' => 0, 'silk_back_colors' => 0],
+            [],
+        );
+    }
+
+    public function test_textile_silk_screen_rejects_negative_color_counts_even_when_total_is_positive(): void
+    {
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+
+        (new QuoteComponentRequirements)->missing(
+            new QuotePreset(['code' => 'product-workwear']),
+            ['personalization' => 'silk-screen', 'silk_front_colors' => -1, 'silk_back_colors' => 2],
+            [],
+        );
+    }
+
+    public function test_embroidery_requires_an_explicit_matrix_yes_or_no_answer(): void
+    {
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+
+        (new QuoteComponentRequirements)->missing(
+            new QuotePreset(['code' => 'product-cap']),
+            ['personalization' => 'embroidery'],
+            [],
+        );
+    }
+
+    public function test_basic_tshirt_silk_screen_requires_front_or_back_color_counts(): void
+    {
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+
+        (new QuoteComponentRequirements)->missing(
+            new QuotePreset(['code' => 'product-basic-tshirt']),
+            ['personalization' => 'silk-screen'],
+            [],
+        );
     }
 }
