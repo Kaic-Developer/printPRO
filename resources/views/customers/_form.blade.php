@@ -1,0 +1,10 @@
+@include('partials.errors')
+<div class="card form-card"><div class="section-heading"><div><h2>Dados do cliente</h2><p class="muted">Campos com <span class="required">*</span> são obrigatórios.</p></div></div>
+<div class="form-body"><div class="form-grid">
+<x-field name="name" label="Nome ou razão social" :value="$customer->name ?? ''" :required="true" maxlength="255" autocomplete="name"/>
+<div class="field"><label for="type">Tipo de cliente <span class="required" aria-hidden="true">*</span></label><select name="type" id="type" required @error('type') aria-invalid="true" aria-describedby="type-error" @enderror><option value="individual" @selected(old('type', $customer->type ?? 'individual') === 'individual')>Pessoa física</option><option value="company" @selected(old('type', $customer->type ?? '') === 'company')>Empresa</option></select>@error('type')<p id="type-error" class="field-error">{{ $message }}</p>@enderror</div>
+<x-field name="email" label="E-mail" type="email" :value="$customer->email ?? ''" autocomplete="email" maxlength="255"/>
+<x-field name="phone" label="Telefone" type="tel" :value="$customer->phone ?? ''" autocomplete="tel"/>
+<x-field name="document" label="CPF ou CNPJ" :value="$customer->document ?? ''"/>
+</div><div class="field"><label for="notes">Observações</label><p class="field-hint" id="notes-hint">Informações úteis para o próximo atendimento.</p><textarea id="notes" name="notes" rows="5" aria-describedby="notes-hint{{ $errors->has('notes') ? ' notes-error' : '' }}" @error('notes') aria-invalid="true" @enderror>{{ old('notes', $customer->notes ?? '') }}</textarea>@error('notes')<p class="field-error" id="notes-error">{{ $message }}</p>@enderror</div></div>
+<div class="form-actions"><a class="button secondary" href="{{ isset($customer) ? route('customers.show', $customer) : route('customers.index') }}">Cancelar</a><button class="button primary" type="submit">{{ isset($customer) ? 'Salvar alterações' : 'Cadastrar cliente' }}<x-icon name="arrow"/></button></div></div>

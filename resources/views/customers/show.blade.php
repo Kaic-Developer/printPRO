@@ -1,0 +1,6 @@
+@extends('layouts.app')
+@section('title', $customer->name)
+@section('content')
+<a class="back-link" href="{{ route('customers.index') }}">← Voltar para clientes</a><div class="page-heading"><div><span class="eyebrow">PERFIL DO CLIENTE</span><h1>{{ $customer->name }}</h1><span class="badge">{{ $customer->type === 'company' ? 'Empresa' : 'Pessoa física' }}</span></div><a class="button primary" href="{{ route('customers.edit', $customer) }}">Editar cliente<x-icon name="arrow"/></a></div>
+<section class="card detail-card"><div class="section-heading"><h2>Informações do cliente</h2><x-icon name="users"/></div><dl class="detail-grid"><div><dt>Nome ou razão social</dt><dd>{{ $customer->name }}</dd></div><div><dt>Tipo de cliente</dt><dd>{{ $customer->type === 'company' ? 'Empresa' : 'Pessoa física' }}</dd></div><div><dt>E-mail</dt><dd>{{ $customer->email ?: 'Não informado' }}</dd></div><div><dt>Telefone</dt><dd>{{ $customer->phone ?: 'Não informado' }}</dd></div><div><dt>CPF ou CNPJ</dt><dd>{{ $customer->document ?: 'Não informado' }}</dd></div></dl><div class="notes-section"><h3>Observações</h3><p class="notes">{{ $customer->notes ?: 'Nenhuma observação cadastrada.' }}</p></div></section>
+@endsection
