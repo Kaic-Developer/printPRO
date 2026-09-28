@@ -116,6 +116,12 @@ O API devolve os dados estimados persistidos, inclusive `consumed_quantity_milli
 
 No nesting de folders, as opções padrão A3 (297 × 420 mm) e SRA3 (320 × 450 mm) precisam corresponder às dimensões do papel cadastradas pela gráfica, aceitando orientação girada. Use “Outro formato” para qualquer medida personalizada; assim o rótulo escolhido não diverge da folha usada no cálculo. A3 segue o formato de folha aparada da ISO 216; SRA3 é o formato comercial de 320 × 450 mm usado para impressão com sangria ([ISO 216](https://www.iso.org/standard/36631.html), [Rayfilm — SRA3 320 × 450 mm](https://www.rayfilm.cz/cs/aktuality/formaty-sra3-320-x-450-mm-v-nabidce-rayfilm-55/)).
 
+Na ficha de acrílico e plásticos, tipo e espessura determinam a chapa obrigatória; corte laser/router sempre precisa estar incluído, e a dobra térmica entra quando marcada. A regra vale também para consumo manual, então não depende de ativar nesting para conferir os componentes.
+
+Para PS, PVC expandido e policarbonato, o wizard vincula o tipo à referência de chapa configurada pela empresa e não pergunta espessura: o catálogo inicial não oferece variantes de custo por espessura para esses três plásticos. O operador deve manter o custo configurado correspondente à referência de estoque usada; a seleção de espessura e o vínculo automático por faixa são oferecidos para acrílico cast.
+
+No corte de acrílico/plásticos, laser e router CNC são processos com custos horários independentes por gráfica. O wizard seleciona somente o processo escolhido; configure os dois custos separadamente no catálogo. A opção legada agregada permanece no catálogo para compatibilidade, mas não é sugerida na ficha nova.
+
 ## Executar e validar
 
 ```powershell

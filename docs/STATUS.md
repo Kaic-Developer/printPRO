@@ -30,10 +30,11 @@ Fluxos implementados: organização, login, painel, clientes, catálogo comercia
 - API v1 para autenticação por token, catálogo, configuração, orçamento, nesting e ordens de produção.
 - Documentação funcional e contratos em [ORCAMENTOS.md](ORCAMENTOS.md).
 
+- A ficha de acrílico liga material à espessura e separa taxas horárias de corte laser e router; PS, PVC expandido e policarbonato usam a referência genérica configurada pela gráfica.
 ## Verificação e próximos passos
 
 - Os testes usam SQLite em memória e não devem executar `migrate:fresh` no banco local.
 - Migrations `2026_09_28_000004` e `2026_09_28_000005` aplicadas ao MySQL local; os presets foram sincronizados sem resetar dados. A migration 005 armazena dimensões nominais por material e organização.
-- Última validação: `php artisan test` (85 testes, 586 assertions), `npm.cmd run build`, `php artisan view:cache`, `git diff --check` e revisão cruzada de domínio.
+- Última validação: `php artisan test` (90 testes, 638 assertions), `npm.cmd run build`, `php artisan view:cache`, `git diff --check` e revisão cruzada de domínio.
 - O nesting integrado cobre fachada, grandes formatos, adesivo, cartão, flyer/folder promocional, pasta institucional, rótulo em bobina/cartela e acrílico/plásticos, com material e dimensões verificados no servidor. Para bobinas, o estimador escolhe automaticamente a orientação de menor comprimento nas duas grades retangulares avaliadas; confirme a possibilidade de girar a arte. Outros produtos ainda exigem consumo informado pela gráfica.
 - Pedidos com acompanhamento de chão de fábrica, atendimento compartilhado, relatórios integrados, contas a pagar/receber e aplicativo nativo continuam no roteiro.

@@ -28,7 +28,7 @@ class QuoteNestingIntegrationTest extends TestCase
             'product-printed-adhesive' => ['material-vinyl-monomeric', 'process-large-format-print'],
             'product-presentation-folder' => ['material-couche-300g', 'process-sheet-print'],
             'sign-facade' => ['material-acm-3mm', 'process-welding'],
-            'product-acrylic-cutout' => ['material-acrylic-cast-3mm', 'process-laser-router-cut'],
+            'product-acrylic-cutout' => ['material-acrylic-cast-3mm', 'process-laser-cut'],
             'product-basic-tshirt' => ['material-cotton-menegotti', 'process-silk-screen'],
             'product-labels-roll-sheet' => ['material-label-roll-stock', 'process-label-printing'],
             default => ['material-cardstock-300g', 'process-sheet-print'],
@@ -558,9 +558,9 @@ class QuoteNestingIntegrationTest extends TestCase
         $scenarios = [
             ['acrylic-crystal', '2', 'material-acrylic-cast-2mm'],
             ['acrylic-color', '10', 'material-acrylic-cast-10mm'],
-            ['ps', '3', 'material-ps-sheet'],
-            ['expanded-pvc', '5', 'material-expanded-pvc-sheet'],
-            ['polycarbonate', '6', 'material-polycarbonate-sheet'],
+            ['ps', null, 'material-ps-sheet'],
+            ['expanded-pvc', null, 'material-expanded-pvc-sheet'],
+            ['polycarbonate', null, 'material-polycarbonate-sheet'],
         ];
 
         foreach ($scenarios as [$plasticType, $thickness, $materialCode]) {
@@ -569,13 +569,18 @@ class QuoteNestingIntegrationTest extends TestCase
                 ['organization_id' => $user->organization_id, 'quote_preset_id' => $material->id],
                 ['is_enabled' => true, 'unit_cost_cents' => 100, 'material_width_mm' => 500, 'material_length_mm' => 500, 'created_at' => now(), 'updated_at' => now()],
             );
+            $answers = [
+                'width_mm' => '100', 'height_mm' => '80',
+                'plastic_type' => $plasticType, 'cut_process' => 'laser', 'thermal_bend' => false,
+            ];
+            if ($thickness !== null) $answers['thickness_mm'] = $thickness;
             $payload = $this->payload($fixture, '1', 1, [
                 'material_type' => 'sheet', 'piece_width_mm' => 100, 'piece_length_mm' => 80,
                 'material_width_mm' => 500, 'material_length_mm' => 500,
-            ], [
-                'width_mm' => '100', 'height_mm' => '80', 'thickness_mm' => $thickness,
-                'plastic_type' => $plasticType, 'cut_process' => 'laser', 'thermal_bend' => false,
-            ]);
+            ], $answers);
+            if (! in_array($plasticType, ['acrylic-crystal', 'acrylic-color'], true)) {
+                unset($payload['items'][0]['answers']['thickness_mm']);
+            }
             $payload['items'][0]['nesting']['material_code'] = $materialCode;
             $payload['items'][0]['components'][0]['code'] = $materialCode;
 
@@ -595,6 +600,52 @@ class QuoteNestingIntegrationTest extends TestCase
         $invalidThickness['items'][0]['nesting']['material_code'] = 'material-acrylic-cast-2mm';
         $invalidThickness['items'][0]['components'][0]['code'] = 'material-acrylic-cast-2mm';
         $this->actingAs($user)->postJson('/quotes', $invalidThickness)->assertUnprocessable();
+
+        $this->actingAs($user)->get('/quotes/create')
+            ->assertOk()
+            ->assertSee('data-visible-field="plastic_type"', false)
+            ->assertSee('data-visible-in="acrylic-crystal,acrylic-color"', false);
+    }
+
+    public function test_manual_acrylic_quote_cannot_omit_matching_sheet_cut_or_marked_thermal_bend(): void
+    {
+        $fixture = $this->fixture('product-acrylic-cutout');
+        [$user] = $fixture;
+        $payload = $this->payload($fixture, '1', 1, [], [
+            'width_mm' => '100', 'height_mm' => '80', 'thickness_mm' => '3',
+            'plastic_type' => 'acrylic-crystal', 'cut_process' => 'laser', 'thermal_bend' => false,
+        ]);
+        unset($payload['items'][0]['nesting']);
+        foreach ($payload['items'][0]['components'] as &$component) $component['quantity'] = '1';
+        unset($component);
+
+        $this->actingAs($user)->post('/quotes', $payload)->assertRedirect();
+
+        $routerProcess = QuotePreset::query()->where('code', 'process-router-cut')->firstOrFail();
+        DB::table('organization_quote_presets')->updateOrInsert(
+            ['organization_id' => $user->organization_id, 'quote_preset_id' => $routerProcess->id],
+            ['is_enabled' => true, 'unit_cost_cents' => 75, 'created_at' => now(), 'updated_at' => now()],
+        );
+        $routerPayload = $payload;
+        $routerPayload['items'][0]['answers']['cut_process'] = 'router';
+        $routerPayload['items'][0]['components'][1]['code'] = 'process-router-cut';
+        $this->actingAs($user)->post('/quotes', $routerPayload)->assertRedirect();
+        $routerComponent = QuoteItem::query()->latest('id')->firstOrFail()->components()->where('preset_code', 'process-router-cut')->firstOrFail();
+        $this->assertSame(75, $routerComponent->unit_cost_cents);
+
+        $missingCut = $payload;
+        $missingCut['items'][0]['components'][1]['selected'] = false;
+        $this->actingAs($user)->post('/quotes', $missingCut)->assertSessionHasErrors('items.0.components');
+
+        $wrongSheet = $payload;
+        $wrongSheet['items'][0]['components'][0]['code'] = 'material-acrylic-cast-2mm';
+        $this->actingAs($user)->post('/quotes', $wrongSheet)->assertSessionHasErrors('items.0.components');
+
+        $bentPart = $payload;
+        $bentPart['items'][0]['answers']['thermal_bend'] = true;
+        $this->actingAs($user)->post('/quotes', $bentPart)->assertSessionHasErrors('items.0.components');
+        $bentPart['items'][0]['components'][] = ['code' => 'process-thermal-bending', 'selected' => true, 'quantity' => '1'];
+        $this->actingAs($user)->post('/quotes', $bentPart)->assertRedirect();
     }
 
     public function test_selected_stock_must_match_the_product_wizard_and_manual_components_are_labeled(): void

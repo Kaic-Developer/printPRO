@@ -56,6 +56,31 @@ class QuoteComponentRequirementsTest extends TestCase
         }
     }
 
+    public function test_acrylic_and_plastic_component_requirements_follow_material_thickness_and_bending(): void
+    {
+        $requirements = new QuoteComponentRequirements;
+        $preset = new QuotePreset(['code' => 'product-acrylic-cutout']);
+        $scenarios = [
+            [['plastic_type' => 'acrylic-crystal', 'thickness_mm' => '2', 'cut_process' => 'laser', 'thermal_bend' => false], ['material-acrylic-cast-2mm', 'process-laser-cut']],
+            [['plastic_type' => 'acrylic-color', 'thickness_mm' => '10', 'cut_process' => 'router', 'thermal_bend' => true], ['material-acrylic-cast-10mm', 'process-router-cut', 'process-thermal-bending']],
+            [['plastic_type' => 'ps', 'cut_process' => 'laser', 'thermal_bend' => false], ['material-ps-sheet', 'process-laser-cut']],
+            [['plastic_type' => 'expanded-pvc', 'cut_process' => 'router', 'thermal_bend' => false], ['material-expanded-pvc-sheet', 'process-router-cut']],
+            [['plastic_type' => 'polycarbonate', 'cut_process' => 'laser', 'thermal_bend' => true], ['material-polycarbonate-sheet', 'process-laser-cut', 'process-thermal-bending']],
+        ];
+
+        foreach ($scenarios as [$answers, $expected]) {
+            $this->assertEqualsCanonicalizing($expected, $requirements->missing($preset, $answers, []));
+            $this->assertSame([], $requirements->missing($preset, $answers, $expected));
+            $this->assertSame([], $requirements->conflicting($preset, $answers, $expected));
+        }
+
+        $answers = ['plastic_type' => 'acrylic-crystal', 'thickness_mm' => '3', 'cut_process' => 'laser', 'thermal_bend' => false];
+        $this->assertEqualsCanonicalizing(
+            ['material-acrylic-cast-2mm', 'process-router-cut', 'process-thermal-bending'],
+            $requirements->conflicting($preset, $answers, ['material-acrylic-cast-3mm', 'process-laser-cut', 'material-acrylic-cast-2mm', 'process-router-cut', 'process-thermal-bending']),
+        );
+    }
+
     public function test_optional_print_finishes_and_selected_bindings_are_priced_components(): void
     {
         $requirements = new QuoteComponentRequirements;

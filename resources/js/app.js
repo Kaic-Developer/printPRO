@@ -106,6 +106,39 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         });
     };
 
+    const syncAcrylicComponentChoices = (panel) => {
+        if (panel.dataset.presetPanel !== 'product-acrylic-cutout') return;
+        const answer = (key) => panel.querySelector(`[data-wizard-field="${CSS.escape(key)}"] select`)?.value;
+        const plasticType = answer('plastic_type');
+        const thickness = answer('thickness_mm');
+        const acrylicMaterials = {
+            '2': 'material-acrylic-cast-2mm', '3': 'material-acrylic-cast-3mm', '4': 'material-acrylic-cast-4mm',
+            '5': 'material-acrylic-cast-5mm', '6': 'material-acrylic-cast-6mm', '8': 'material-acrylic-cast-8mm',
+            '10': 'material-acrylic-cast-10mm',
+        };
+        const materialCode = ['acrylic-crystal', 'acrylic-color'].includes(plasticType)
+            ? acrylicMaterials[thickness]
+            : ({ ps: 'material-ps-sheet', 'expanded-pvc': 'material-expanded-pvc-sheet', polycarbonate: 'material-polycarbonate-sheet' })[plasticType];
+        const cutCode = ({ laser: 'process-laser-cut', router: 'process-router-cut' })[answer('cut_process')];
+        const plasticMaterialCodes = ['material-acrylic-sheet', ...Object.values(acrylicMaterials), 'material-ps-sheet', 'material-expanded-pvc-sheet', 'material-polycarbonate-sheet'];
+
+        if (materialCode) {
+            panel.querySelectorAll('[data-component-code]').forEach((row) => {
+                if (!plasticMaterialCodes.includes(row.dataset.componentCode)) return;
+                const checkbox = row.querySelector('[name$="[selected]"]');
+                if (checkbox) checkbox.checked = row.dataset.componentCode === materialCode;
+            });
+        }
+        if (cutCode) {
+            panel.querySelectorAll('[data-component-code="process-laser-cut"], [data-component-code="process-router-cut"]').forEach((row) => {
+                const checkbox = row.querySelector('[name$="[selected]"]');
+                if (checkbox) checkbox.checked = row.dataset.componentCode === cutCode;
+            });
+        }
+        const thermalBending = panel.querySelector('[data-component-code="process-thermal-bending"] [name$="[selected]"]');
+        if (thermalBending && ['0', '1'].includes(answer('thermal_bend'))) thermalBending.checked = answer('thermal_bend') === '1';
+    };
+
     const syncTextilePrintDimensions = (panel) => {
         if (panel.dataset.presetPanel !== 'product-basic-tshirt') return;
         const selectedSize = panel.querySelector('[data-wizard-field="print_size"] select')?.value;
@@ -372,6 +405,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             if (active) {
                 updateConditionalFields(panel);
                 updateComponentSuggestions(panel);
+                syncAcrylicComponentChoices(panel);
                 syncTextilePrintDimensions(panel);
                 updateWizardQuantityManagement(panel);
                 updateNestingMaterialOptions(panel);
@@ -428,6 +462,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         }
         updateConditionalFields(panel);
         updateComponentSuggestions(panel);
+        syncAcrylicComponentChoices(panel);
         syncTextilePrintDimensions(panel);
         updateWizardQuantityManagement(panel);
         updateNestingMaterialOptions(panel);
@@ -447,6 +482,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             const panel = event.target.closest('[data-preset-panel]');
             if (field && panel) {
                 updateConditionalFields(panel);
+                syncAcrylicComponentChoices(panel);
                 syncTextilePrintDimensions(panel);
                 updateWizardQuantityManagement(panel);
                 if (event.target.matches('select')) updateComponentSuggestions(panel);

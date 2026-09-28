@@ -14,6 +14,7 @@ final class QuoteComponentRequirements
             'sign-facade' => $this->facade($answers),
             'product-frontlight-banner' => $this->banner($answers),
             'product-printed-adhesive' => $this->adhesive($answers),
+            'product-acrylic-cutout' => $this->acrylicCutout($answers),
             'uniform-polo' => $this->polo($answers),
             'product-basic-tshirt' => $this->basicTshirt($answers),
             'product-dtf-dtg-print' => $this->dtfDtgPrint($answers),
@@ -44,6 +45,7 @@ final class QuoteComponentRequirements
             'product-mug' => ['material-gift-mug-ceramic', 'material-gift-mug-polymer', 'process-sublimation', 'process-gift-printing'],
             'product-labels-roll-sheet' => ['material-label-roll-stock', 'material-label-sheet-stock'],
             'product-frontlight-banner' => ['material-frontlight-440g', 'material-frontlight-500g', 'material-backlight', 'material-mesh', 'material-sublimation-fabric'],
+            'product-acrylic-cutout' => ['material-acrylic-sheet', 'material-acrylic-cast-2mm', 'material-acrylic-cast-3mm', 'material-acrylic-cast-4mm', 'material-acrylic-cast-5mm', 'material-acrylic-cast-6mm', 'material-acrylic-cast-8mm', 'material-acrylic-cast-10mm', 'material-ps-sheet', 'material-expanded-pvc-sheet', 'material-polycarbonate-sheet', 'process-laser-cut', 'process-router-cut', 'process-laser-router-cut', 'process-thermal-bending'],
             'print-business-card' => ['material-cardstock-250g', 'material-cardstock-300g', 'material-card-pvc-075'],
             'product-presentation-folder', 'product-flyer', 'product-folder-print' => ['material-cardstock-250g', 'material-couche-300g', 'material-offset-90g'],
             'product-envelopes', 'product-letterhead' => ['material-offset-90g'],
@@ -71,6 +73,7 @@ final class QuoteComponentRequirements
             'product-mug' => $this->mug($answers),
             'product-labels-roll-sheet' => [$this->labels($answers)[0]],
             'product-frontlight-banner' => [$this->banner($answers)[0]],
+            'product-acrylic-cutout' => $this->acrylicCutout($answers),
             'print-business-card' => [$this->businessCard($answers)[0]],
             'product-presentation-folder' => [$this->presentationFolder($answers)[0]],
             'product-flyer', 'product-folder-print', 'product-envelopes', 'product-letterhead' => [$this->printedStock($answers, [])[0]],
@@ -322,6 +325,36 @@ final class QuoteComponentRequirements
         if ($laminationMaterial !== null) $required[] = $laminationMaterial;
         if (($answers['lamination'] ?? 'none') !== 'none') $required[] = 'finish-vinyl-lamination';
         if (($answers['cut_type'] ?? 'straight') === 'plotter') $required[] = 'process-plotter-cut';
+
+        return $required;
+    }
+
+    /** Material segue tipo/espessura e taxas de laser/router ficam separadas; dobra marcada nunca fica fora da ficha. */
+    private function acrylicCutout(array $answers): array
+    {
+        $material = match ($answers['plastic_type'] ?? '') {
+            'acrylic-crystal', 'acrylic-color' => match ((string) ($answers['thickness_mm'] ?? '')) {
+                '2' => 'material-acrylic-cast-2mm',
+                '3' => 'material-acrylic-cast-3mm',
+                '4' => 'material-acrylic-cast-4mm',
+                '5' => 'material-acrylic-cast-5mm',
+                '6' => 'material-acrylic-cast-6mm',
+                '8' => 'material-acrylic-cast-8mm',
+                '10' => 'material-acrylic-cast-10mm',
+                default => '',
+            },
+            'ps' => 'material-ps-sheet',
+            'expanded-pvc' => 'material-expanded-pvc-sheet',
+            'polycarbonate' => 'material-polycarbonate-sheet',
+            default => '',
+        };
+        $cutProcess = match ($answers['cut_process'] ?? '') {
+            'laser' => 'process-laser-cut',
+            'router' => 'process-router-cut',
+            default => '',
+        };
+        $required = [$material, $cutProcess];
+        if ($this->isTrue($answers['thermal_bend'] ?? false)) $required[] = 'process-thermal-bending';
 
         return $required;
     }
