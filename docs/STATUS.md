@@ -35,7 +35,8 @@ Fluxos implementados: organização, login, painel, clientes, catálogo comercia
 
 - Os testes usam SQLite em memória e não devem executar `migrate:fresh` no banco local.
 - Migrations `2026_09_28_000004` e `2026_09_28_000005` aplicadas ao MySQL local; os presets foram sincronizados sem resetar dados. A migration 005 armazena dimensões nominais por material e organização.
-- Última validação: `php artisan test` (92 testes, 714 assertions), `npm.cmd run build`, `php artisan view:cache`, `git diff --check` e revisão cruzada de domínio.
+- Última validação: `php artisan test` (93 testes, 722 assertions), `npm.cmd run build`, `php artisan view:cache`, `git diff --check` e revisão cruzada de domínio.
 - O nesting integrado cobre fachada, grandes formatos, roll-up, adesivo, cartão, flyer/folder promocional, pasta institucional, rótulo em bobina/cartela e acrílico/plásticos, com material e dimensões verificados no servidor. Para bobinas, o estimador escolhe automaticamente a orientação de menor comprimento nas duas grades retangulares avaliadas; confirme a possibilidade de girar a arte. Outros produtos ainda exigem consumo informado pela gráfica.
 - Roll-up calcula a impressão pela área acabada e quantidade; o nesting calcula separadamente o material com sobras, e estrutura inclusa significa uma unidade por roll-up. Copos long drink, squeezes, tirantes e brindes ecológicos calculam base e personalização por peça com custos configurados. Material e técnica em texto livre são dados descritivos e não mudam o custo genérico automaticamente.
+- Os campos descritivos dos brindes explicam no formulário e no schema da API que não mudam o custo genérico; os custos por peça continuam sendo os componentes configurados pela gráfica.
 - Pedidos com acompanhamento de chão de fábrica, atendimento compartilhado, relatórios integrados, contas a pagar/receber e aplicativo nativo continuam no roteiro.

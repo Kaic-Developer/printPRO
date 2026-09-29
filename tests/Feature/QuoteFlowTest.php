@@ -138,6 +138,24 @@ class QuoteFlowTest extends TestCase
         $this->assertDatabaseCount('quotes', 0);
     }
 
+    public function test_generic_gift_wizard_explains_descriptive_fields_and_cost_basis(): void
+    {
+        $user = $this->owner();
+
+        $this->actingAs($user)->get('/quotes/create')
+            ->assertOk()
+            ->assertSee('Material (descritivo)')
+            ->assertSee('Personalização (descritiva)')
+            ->assertSee('O custo usa a base genérica configurada abaixo; confirme que ela representa este modelo.')
+            ->assertSee('O custo usa o processo genérico por peça configurado abaixo.');
+
+        $token = $user->createToken('wizard-help', ['catalog:read'])->plainTextToken;
+        $catalogResponse = $this->withToken($token)->getJson('/api/v1/quote-presets')->assertOk();
+        $squeeze = collect($catalogResponse->json('categories'))->flatMap(fn (array $category) => $category['items'])->firstWhere('code', 'product-squeeze');
+        $this->assertSame('text', data_get($squeeze, 'wizard_schema.fields.1.type'));
+        $this->assertSame('Informação da peça para a produção. O custo usa a base genérica configurada abaixo; confirme que ela representa este modelo.', data_get($squeeze, 'wizard_schema.fields.1.help'));
+    }
+
     public function test_workwear_quote_can_reuse_an_existing_embroidery_matrix(): void
     {
         $user = $this->owner();
