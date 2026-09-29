@@ -122,7 +122,7 @@ class BuildQuoteVersion
             $nesting = isset($input['nesting'])
                 ? $this->nestingSnapshot($preset, $answers, $quantityMilli, $input['nesting'], $codes, $user->organization_id, $presetSettings, $index, $areaCopies)
                 : null;
-            $wizardQuantities = $this->wizardCalculatedQuantities($preset, $answers, $quantityMilli, $index);
+            $wizardQuantities = $this->wizardCalculatedQuantities($preset, $answers, $quantityMilli, $index, $areaCopies);
 
             $costCents = 0;
             $itemComplete = true;
@@ -292,7 +292,7 @@ class BuildQuoteVersion
     }
 
     /** Calcula a área vendável por peça quando o wizard recebe dimensões explícitas da estampa. */
-    private function wizardCalculatedQuantities(QuotePreset $product, array $answers, int $lineQuantityMilli, int $index): array
+    private function wizardCalculatedQuantities(QuotePreset $product, array $answers, int $lineQuantityMilli, int $index, ?int $areaCopies): array
     {
         $personalization = $answers['personalization'] ?? null;
         if ($product->code === 'product-roll-up') {
@@ -327,6 +327,28 @@ class BuildQuoteVersion
             };
             $perPiece = ['quantity_per_unit_milli' => 1000, 'quantity_milli' => $lineQuantityMilli];
             return [$materialCode => $perPiece, 'process-gift-printing' => $perPiece];
+        }
+
+        $areaPricedComponents = match ($product->code) {
+            'product-frontlight-banner', 'product-banner' => ['process-large-format-print'],
+            'product-printed-adhesive' => [
+                'process-large-format-print', 'process-adhesive-application', 'finish-vinyl-lamination',
+                'material-vinyl-gloss-lamination', 'material-vinyl-matte-lamination', 'material-vinyl-scratch-lamination',
+            ],
+            default => [],
+        };
+        if ($areaPricedComponents !== []) {
+            // Estes componentes usam m², a mesma unidade vendida no produto; waste comercial cobre a perda configurada.
+            $perSquareMeter = ['quantity_per_unit_milli' => 1000, 'quantity_milli' => $lineQuantityMilli];
+            $quantities = array_fill_keys($areaPricedComponents, $perSquareMeter);
+            $rodsIncluded = $product->code === 'product-banner'
+                ? filter_var($answers['rods_cord'] ?? false, FILTER_VALIDATE_BOOLEAN)
+                : $product->code === 'product-frontlight-banner' && in_array('rods-cord', (array) ($answers['finishing'] ?? []), true);
+            if ($rodsIncluded) {
+                // A opção representa um kit de bastões e cordinha por banner, não uma taxa por m².
+                $quantities['finish-banner-rods-cord'] = ['quantity_per_unit_milli' => null, 'quantity_milli' => max(0, (int) $areaCopies) * 1000];
+            }
+            return $quantities;
         }
 
         if ($product->code === 'product-dtf-dtg-print') {
@@ -643,7 +665,7 @@ class BuildQuoteVersion
     private function answerDimensionsMm(QuotePreset $product, array $answers): ?array
     {
         [$widthKey, $heightKey, $scale] = match ($product->code) {
-            'sign-facade', 'product-frontlight-banner', 'product-printed-adhesive' => ['width_m', 'height_m', 'meter'],
+            'sign-facade', 'product-frontlight-banner', 'product-banner', 'product-printed-adhesive' => ['width_m', 'height_m', 'meter'],
             'print-business-card', 'product-acrylic-cutout' => ['width_mm', 'height_mm', 'millimeter'],
             'product-presentation-folder', 'product-folder-print' => ['open_width_mm', 'open_height_mm', 'millimeter'],
             'product-flyer' => ['width_mm', 'height_mm', 'millimeter'],
@@ -666,6 +688,7 @@ class BuildQuoteVersion
                 'frontlight-440g' => 'material-frontlight-440g', 'frontlight-500g' => 'material-frontlight-500g',
                 'backlight' => 'material-backlight', 'mesh' => 'material-mesh', 'sublimation-fabric' => 'material-sublimation-fabric', default => null,
             },
+            'product-banner' => 'material-frontlight-440g',
             'product-roll-up' => 'material-frontlight-440g',
             'product-printed-adhesive' => match ($answers['material'] ?? null) {
                 'monomeric' => 'material-vinyl-monomeric', 'polymeric' => 'material-vinyl-polymeric',

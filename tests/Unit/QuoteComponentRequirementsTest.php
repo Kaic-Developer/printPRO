@@ -91,12 +91,26 @@ class QuoteComponentRequirementsTest extends TestCase
             $requirements->missing($banner, ['rods_cord' => true], []),
         );
         $this->assertSame([], $requirements->missing($banner, ['rods_cord' => false], ['material-frontlight-440g', 'process-large-format-print']));
+        $this->assertSame(
+            ['finish-banner-rods-cord'],
+            $requirements->conflicting($banner, ['rods_cord' => false], ['material-frontlight-440g', 'process-large-format-print', 'finish-banner-rods-cord']),
+        );
+        $this->assertSame([], $requirements->conflicting($banner, ['rods_cord' => true], ['material-frontlight-440g', 'process-large-format-print', 'finish-banner-rods-cord']));
 
         $largeFormat = new QuotePreset(['code' => 'product-frontlight-banner']);
         $this->assertEqualsCanonicalizing(
             ['material-frontlight-440g', 'process-large-format-print', 'finish-banner-rods-cord'],
             $requirements->missing($largeFormat, ['material' => 'frontlight-440g', 'finishing' => ['rods-cord']], []),
         );
+        $this->assertSame(
+            ['finish-banner-rods-cord'],
+            $requirements->conflicting($largeFormat, ['material' => 'frontlight-440g', 'finishing' => []], ['material-frontlight-440g', 'process-large-format-print', 'finish-banner-rods-cord']),
+        );
+        $this->assertSame([], $requirements->conflicting(
+            $largeFormat,
+            ['material' => 'frontlight-440g', 'finishing' => ['rods-cord']],
+            ['material-frontlight-440g', 'process-large-format-print', 'finish-banner-rods-cord'],
+        ));
 
         $agenda = new QuotePreset(['code' => 'product-agenda-notebook']);
         $this->assertEqualsCanonicalizing(
@@ -188,6 +202,16 @@ class QuoteComponentRequirementsTest extends TestCase
             ['material' => 'ceramic', 'print_method' => 'sublimation'],
             ['material-gift-mug-ceramic', 'process-sublimation'],
         ));
+
+        $adhesive = new QuotePreset(['code' => 'product-printed-adhesive']);
+        $this->assertSame(
+            ['process-plotter-cut'],
+            $requirements->conflicting(
+                $adhesive,
+                ['material' => 'monomeric', 'lamination' => 'none', 'cut_type' => 'straight'],
+                ['material-vinyl-monomeric', 'process-large-format-print', 'process-adhesive-application', 'process-plotter-cut'],
+            ),
+        );
     }
 
     public function test_apparel_presets_require_the_selected_base_and_customization_supplies(): void

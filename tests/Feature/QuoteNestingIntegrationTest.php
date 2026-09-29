@@ -26,6 +26,7 @@ class QuoteNestingIntegrationTest extends TestCase
         $product = QuotePreset::query()->where('code', $productCode)->firstOrFail();
         [$materialCode, $processCode] = match ($productCode) {
             'product-frontlight-banner' => ['material-frontlight-440g', 'process-large-format-print'],
+            'product-banner' => ['material-frontlight-440g', 'process-large-format-print'],
             'product-printed-adhesive' => ['material-vinyl-monomeric', 'process-large-format-print'],
             'product-presentation-folder' => ['material-couche-300g', 'process-sheet-print'],
             'sign-facade' => ['material-acm-3mm', 'process-welding'],
@@ -58,7 +59,8 @@ class QuoteNestingIntegrationTest extends TestCase
     {
         [, $product, $material, $process] = $fixture;
         $answers = match ($product->code) {
-            'product-frontlight-banner' => ['media_width_m' => '1', 'material' => 'frontlight-440g', 'finishing' => [], ...$answers],
+            'product-frontlight-banner' => ['material' => 'frontlight-440g', 'finishing' => [], ...$answers],
+            'product-banner' => ['rods_cord' => false, ...$answers],
             'product-printed-adhesive' => ['width_m' => '0.5', 'height_m' => '0.25', 'material' => 'monomeric', 'lamination' => 'none', 'cut_type' => 'straight', ...$answers],
             'product-presentation-folder' => ['sheet_format' => 'a3', 'stock' => 'couche-300g', 'print_colors' => '4x0', 'pocket' => false, 'pocket_ear' => false, 'die_cut' => false, 'lamination' => false, ...$answers],
             'sign-facade' => ['structure_tube' => '20x20', 'reinforcement' => false, 'anti_rust_paint' => false, 'acm_thickness' => '3mm', 'lighting' => 'none', 'requires_munk' => false, 'requires_scaffold' => false, 'height_installation' => false, 'cnc_outsourced' => false, 'galvanizing_outsourced' => false, ...$answers],
@@ -128,6 +130,10 @@ class QuoteNestingIntegrationTest extends TestCase
         $this->assertSame(500, $component->quantity_milli);
         $this->assertSame('m', $component->unit);
         $this->assertSame(50, $component->cost_cents); // 0,5 m × 100 centavos por metro.
+        $printing = $item->components()->where('preset_code', 'process-large-format-print')->firstOrFail();
+        $this->assertSame(1000, $printing->quantity_per_unit_milli);
+        $this->assertSame(500, $printing->quantity_milli);
+        $this->assertSame('wizard', $printing->quantity_source);
         $this->assertSame(500, $item->nesting['roll_length_mm']);
         $this->assertSame(75, $item->cost_cents); // soma mais 25 centavos de impressão para 0,5 m².
 
@@ -146,6 +152,30 @@ class QuoteNestingIntegrationTest extends TestCase
         $this->assertSame('m²', $areaComponent->unit);
         $this->assertSame(20, $areaComponent->cost_cents); // 0,201 m² × 100 centavos, arredondado em centavos.
         $this->assertSame(23, QuoteItem::query()->latest('id')->firstOrFail()->cost_cents); // inclui 3 centavos de impressão para 0,06 m².
+
+        $bannerFixture = $this->fixture('product-banner', 'm²');
+        [$bannerUser, , $bannerMaterial] = $bannerFixture;
+        $bannerPayload = $this->payload($bannerFixture, '0.24', 4, [
+            'material_type' => 'roll', 'piece_width_mm' => 300, 'piece_length_mm' => 200,
+            'material_width_mm' => 1000, 'gap_mm' => 0,
+        ], ['width_m' => '0.3', 'height_m' => '0.2', 'rods_cord' => true]);
+        $bannerPayload['items'][0]['components'][] = ['code' => 'finish-banner-rods-cord', 'selected' => true, 'quantity' => '0.001'];
+        $this->actingAs($bannerUser)->post('/quotes', $bannerPayload)->assertRedirect();
+        $bannerItem = QuoteItem::query()->latest('id')->firstOrFail();
+        $this->assertSame('material-frontlight-440g', $bannerItem->nesting['material_code']);
+        $this->assertSame(300, $bannerItem->components()->where('preset_code', $bannerMaterial->code)->value('quantity_milli'));
+        $bannerPrint = $bannerItem->components()->where('preset_code', 'process-large-format-print')->firstOrFail();
+        $this->assertSame(240, $bannerPrint->quantity_milli);
+        $this->assertSame('wizard', $bannerPrint->quantity_source);
+        $rods = $bannerItem->components()->where('preset_code', 'finish-banner-rods-cord')->firstOrFail();
+        $this->assertSame(4000, $rods->quantity_milli);
+        $this->assertSame('wizard', $rods->quantity_source);
+
+        $unrequestedRods = $bannerPayload;
+        $unrequestedRods['items'][0]['answers']['rods_cord'] = false;
+        $unrequestedRods['items'][0]['components'][] = ['code' => 'finish-banner-rods-cord', 'selected' => true, 'quantity' => '1'];
+        $this->actingAs($bannerUser)->postJson('/quotes', $unrequestedRods)
+            ->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
     }
 
     public function test_fractional_or_mismatched_line_quantity_and_unverifiable_dimensions_are_rejected(): void
@@ -174,7 +204,7 @@ class QuoteNestingIntegrationTest extends TestCase
         $payload = ['items' => [[
             'preset_code' => $product->code,
             'quantity' => '0.6', // a peça mede 0,5 × 0,25 m; 0,6 m² não fecha em cópias inteiras.
-            'answers' => ['width_m' => '0.5', 'height_m' => '0.25', 'media_width_m' => '1', 'material' => 'frontlight-440g'],
+            'answers' => ['width_m' => '0.5', 'height_m' => '0.25', 'material' => 'frontlight-440g'],
             'components' => [
                 ['code' => $material->code, 'selected' => true, 'quantity' => '1'],
                 ['code' => $process->code, 'selected' => true, 'quantity' => '1'],
@@ -239,6 +269,13 @@ class QuoteNestingIntegrationTest extends TestCase
             ->assertSee('data-stock-length="1000"', false)
             ->assertSee('readonly', false)
             ->assertSee('As medidas nominais são configuradas no catálogo da empresa.');
+
+        [$bannerUser] = $this->fixture('product-banner', 'm²');
+        $this->actingAs($bannerUser)->get('/quotes/create')
+            ->assertOk()
+            ->assertSee('data-preset-panel="product-banner"', false)
+            ->assertSee('Largura cadastrada do material (mm)')
+            ->assertDontSee('media_width_m');
     }
 
     public function test_adhesive_quote_form_renders_nesting_for_enabled_configured_vinyl(): void
@@ -808,6 +845,16 @@ class QuoteNestingIntegrationTest extends TestCase
             $this->postJson('/quotes', $omission)->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
         }
 
+        foreach (['material-vinyl-polymeric', 'material-vinyl-gloss-lamination', 'material-vinyl-scratch-lamination'] as $incompatibleCode) {
+            $incompatible = $base;
+            $incompatible['items'][0]['components'][] = ['code' => $incompatibleCode, 'selected' => true, 'quantity' => '1'];
+            $this->postJson('/quotes', $incompatible)->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
+        }
+
+        $straightCut = $base;
+        $straightCut['items'][0]['answers']['cut_type'] = 'straight';
+        $this->postJson('/quotes', $straightCut)->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
+
         $this->actingAs($user)->post('/quotes', $base)->assertRedirect();
         $item = QuoteItem::query()->firstOrFail();
         $consumedVinyl = $item->components()->where('preset_code', $vinyl->code)->firstOrFail();
@@ -817,7 +864,12 @@ class QuoteNestingIntegrationTest extends TestCase
         $this->assertSame(500, $item->nesting['roll_length_mm']);
         $this->assertSame('process-adhesive-application', $item->components()->where('preset_code', $application->code)->value('preset_code'));
         $this->assertSame('material-vinyl-matte-lamination', $item->components()->where('preset_code', $laminationFilm->code)->value('preset_code'));
-        $this->assertSame('process-large-format-print', $item->components()->where('preset_code', $printing->code)->value('preset_code'));
+        foreach ([$printing->code, $application->code, $lamination->code, $laminationFilm->code] as $areaCode) {
+            $areaComponent = $item->components()->where('preset_code', $areaCode)->firstOrFail();
+            $this->assertSame(1000, $areaComponent->quantity_per_unit_milli);
+            $this->assertSame(500, $areaComponent->quantity_milli);
+            $this->assertSame('wizard', $areaComponent->quantity_source);
+        }
     }
 
     public function test_roll_up_and_gift_quotes_block_missing_base_process_and_included_stand(): void

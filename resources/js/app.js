@@ -139,6 +139,54 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         if (thermalBending && ['0', '1'].includes(answer('thermal_bend'))) thermalBending.checked = answer('thermal_bend') === '1';
     };
 
+    // Mantém a ficha do adesivo alinhada ao substrato, à laminação e ao recorte escolhidos.
+    const syncAdhesiveComponentChoices = (panel) => {
+        if (panel.dataset.presetPanel !== 'product-printed-adhesive') return;
+        const answer = (key) => panel.querySelector(`[data-wizard-field="${CSS.escape(key)}"] select`)?.value;
+        const materialCode = ({
+            monomeric: 'material-vinyl-monomeric', polymeric: 'material-vinyl-polymeric',
+            perforated: 'material-vinyl-perforated', frosted: 'material-vinyl-frosted',
+            'static-cling': 'material-vinyl-static-cling',
+        })[answer('material')];
+        const laminateCode = ({
+            gloss: 'material-vinyl-gloss-lamination', matte: 'material-vinyl-matte-lamination',
+            'scratch-resistant': 'material-vinyl-scratch-lamination',
+        })[answer('lamination')];
+        const cutCode = answer('cut_type') === 'plotter' ? 'process-plotter-cut' : null;
+        const controlled = [
+            'material-vinyl-monomeric', 'material-vinyl-polymeric', 'material-vinyl-perforated',
+            'material-vinyl-frosted', 'material-vinyl-static-cling', 'material-vinyl-gloss-lamination',
+            'material-vinyl-matte-lamination', 'material-vinyl-scratch-lamination',
+            'finish-vinyl-lamination', 'process-plotter-cut',
+        ];
+        const required = [materialCode, laminateCode, answer('lamination') !== 'none' ? 'finish-vinyl-lamination' : null, cutCode]
+            .filter(Boolean);
+
+        panel.querySelectorAll('[data-component-code]').forEach((row) => {
+            const code = row.dataset.componentCode;
+            if (!controlled.includes(code)) return;
+            const checkbox = row.querySelector('[name$="[selected]"]');
+            const visible = required.includes(code);
+            row.hidden = !visible;
+            if (checkbox) checkbox.checked = visible;
+        });
+    };
+
+    // O acabamento de bastÃµes sÃ³ fica na ficha quando o assistente o inclui no pedido.
+    const syncBannerComponents = (panel) => {
+        const productCode = panel.dataset.presetPanel;
+        if (!['product-banner', 'product-frontlight-banner'].includes(productCode)) return;
+        const rodsIncluded = productCode === 'product-banner'
+            ? panel.querySelector('[data-wizard-field="rods_cord"] select')?.value === '1'
+            : [...(panel.querySelector('[data-wizard-field="finishing"] select')?.selectedOptions ?? [])]
+                .some((option) => option.value === 'rods-cord');
+        const row = panel.querySelector('[data-component-code="finish-banner-rods-cord"]');
+        if (!row) return;
+        row.hidden = !rodsIncluded;
+        const checkbox = row.querySelector('[name$="[selected]"]');
+        if (checkbox) checkbox.checked = rodsIncluded;
+    };
+
     const syncRollUpAndGiftComponents = (panel) => {
         const productCode = panel.dataset.presetPanel;
         const giftMaterials = {
@@ -188,6 +236,21 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         const productCode = panel.dataset.presetPanel;
         const personalization = panel.querySelector('[data-wizard-field="personalization"] select')?.value;
         const textileProducts = ['uniform-polo', 'product-basic-tshirt', 'product-workwear', 'product-sweatshirt', 'product-apron', 'product-cap'];
+        const lamination = panel.querySelector('[data-wizard-field="lamination"] select')?.value;
+        const laminationMaterial = ({
+            gloss: 'material-vinyl-gloss-lamination',
+            matte: 'material-vinyl-matte-lamination',
+            'scratch-resistant': 'material-vinyl-scratch-lamination',
+        })[lamination];
+        const rodsIncluded = productCode === 'product-banner'
+            ? panel.querySelector('[data-wizard-field="rods_cord"] select')?.value === '1'
+            : productCode === 'product-frontlight-banner'
+                && [...(panel.querySelector('[data-wizard-field="finishing"] select')?.selectedOptions ?? [])].some((option) => option.value === 'rods-cord');
+        const areaPricedCodes = ['product-frontlight-banner', 'product-banner'].includes(productCode)
+            ? ['process-large-format-print', ...(rodsIncluded ? ['finish-banner-rods-cord'] : [])]
+            : productCode === 'product-printed-adhesive'
+                ? ['process-large-format-print', 'process-adhesive-application', ...(laminationMaterial ? ['finish-vinyl-lamination', laminationMaterial] : [])]
+                : [];
         const managedCodes = productCode === 'product-dtf-dtg-print'
             ? ({ dtf: ['process-dtf-print-size', 'material-textile-dtf-transfer'], dtg: ['process-dtg-print-size'] })[panel.querySelector('[data-wizard-field="technique"] select')?.value] ?? []
             : productCode === 'product-basic-tshirt'
@@ -201,7 +264,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 ? ['process-silk-screen', 'material-silk-screen-screen', 'material-silk-screen-film', 'material-silk-screen-ink']
                 : textileProducts.includes(productCode) && personalization === 'embroidery'
                     ? ['process-computerized-embroidery', ...(panel.querySelector('[data-wizard-field="embroidery_matrix"] select')?.value === '1' ? ['third-party-embroidery-matrix'] : [])]
-                    : [];
+                    : areaPricedCodes;
         const colors = ['silk_front_colors', 'silk_back_colors'].reduce((total, key) => total + (Number(panel.querySelector(`[data-wizard-field="${key}"] input`)?.value) || 0), 0);
         const stitches = Number(panel.querySelector('[data-wizard-field="estimated_stitches"] input')?.value) || 0;
         panel.querySelectorAll('[data-component-code]').forEach((row) => {
@@ -231,6 +294,13 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                         'material-silk-screen-film': `Calculado uma vez nesta linha: ${colors} fotolito(s), conforme as cores na frente e no verso.`,
                         'material-silk-screen-ink': `Calculada por peça: ${colors} aplicação(ões) de cor × quantidade de peças.`,
                         'process-silk-screen': `Calculado por peça: ${colors} aplicação(ões) de cor × quantidade de peças.`,
+                        'process-large-format-print': 'Calculado pela área vendida do trabalho, em m².',
+                        'finish-banner-rods-cord': 'Calculado como um kit para cada banner produzido.',
+                        'process-adhesive-application': 'Calculada pela área vendida do adesivo, em m².',
+                        'finish-vinyl-lamination': 'Calculada pela área laminada do adesivo, em m².',
+                        'material-vinyl-gloss-lamination': 'Calculado pela área final do adesivo, em m².',
+                        'material-vinyl-matte-lamination': 'Calculado pela área final do adesivo, em m².',
+                        'material-vinyl-scratch-lamination': 'Calculado pela área final do adesivo, em m².',
                         'process-computerized-embroidery': `Calculado por peça: ${stitches.toLocaleString('pt-BR')} pontos ÷ 1.000 × quantidade do pedido.`,
                         'third-party-embroidery-matrix': 'Uma matriz para esta linha/arte. Se já estiver pronta, marque “Matriz necessária” como Não.',
                     })[code] ?? 'Consumo calculado pela ficha técnica e multiplicado pela quantidade do pedido.';
@@ -272,6 +342,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         const keyMap = {
             'sign-facade': ['width_m', 'height_m', 1000],
             'product-frontlight-banner': ['width_m', 'height_m', 1000],
+            'product-banner': ['width_m', 'height_m', 1000],
             'product-roll-up': ['width_mm', 'height_mm', 1],
             'product-printed-adhesive': ['width_m', 'height_m', 1000],
             'print-business-card': ['width_mm', 'height_mm', 1],
@@ -300,6 +371,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         const schema = {
             'sign-facade': { key: 'acm_thickness', values: { '3mm': 'material-acm-3mm', '4mm': 'material-acm-4mm' } },
             'product-frontlight-banner': { key: 'material', values: { 'frontlight-440g': 'material-frontlight-440g', 'frontlight-500g': 'material-frontlight-500g', backlight: 'material-backlight', mesh: 'material-mesh', 'sublimation-fabric': 'material-sublimation-fabric' } },
+            'product-banner': { key: 'rods_cord', values: { '0': 'material-frontlight-440g', '1': 'material-frontlight-440g' } },
             'product-roll-up': { key: 'stand_included', values: { '0': 'material-frontlight-440g', '1': 'material-frontlight-440g' } },
             'product-printed-adhesive': { key: 'material', values: { monomeric: 'material-vinyl-monomeric', polymeric: 'material-vinyl-polymeric', perforated: 'material-vinyl-perforated', frosted: 'material-vinyl-frosted', 'static-cling': 'material-vinyl-static-cling' } },
             'print-business-card': { key: 'stock', values: { 'couche-250g': 'material-cardstock-250g', 'couche-300g': 'material-cardstock-300g', 'pvc-075': 'material-card-pvc-075' } },
@@ -433,6 +505,8 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 updateConditionalFields(panel);
                 updateComponentSuggestions(panel);
                 syncAcrylicComponentChoices(panel);
+                syncAdhesiveComponentChoices(panel);
+                syncBannerComponents(panel);
                 syncRollUpAndGiftComponents(panel);
                 syncTextilePrintDimensions(panel);
                 updateWizardQuantityManagement(panel);
@@ -491,6 +565,8 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         updateConditionalFields(panel);
         updateComponentSuggestions(panel);
         syncAcrylicComponentChoices(panel);
+        syncAdhesiveComponentChoices(panel);
+        syncBannerComponents(panel);
         syncRollUpAndGiftComponents(panel);
         syncTextilePrintDimensions(panel);
         updateWizardQuantityManagement(panel);
@@ -512,6 +588,8 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             if (field && panel) {
                 updateConditionalFields(panel);
                 syncAcrylicComponentChoices(panel);
+                syncAdhesiveComponentChoices(panel);
+                syncBannerComponents(panel);
                 syncRollUpAndGiftComponents(panel);
                 syncTextilePrintDimensions(panel);
                 updateWizardQuantityManagement(panel);
