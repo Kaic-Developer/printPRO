@@ -122,6 +122,8 @@ Para PS, PVC expandido e policarbonato, o wizard vincula o tipo à referência d
 
 No corte de acrílico/plásticos, laser e router CNC são processos com custos horários independentes por gráfica. O wizard seleciona somente o processo escolhido; configure os dois custos separadamente no catálogo. A opção legada agregada permanece no catálogo para compatibilidade, mas não é sugerida na ficha nova.
 
+Roll-up usa nesting de bobina para calcular o material total consumido, incluindo a sobra de borda. A impressão é calculada separadamente pelas dimensões acabadas da arte e pela quantidade, sem cobrar a sobra como área impressa; a estrutura só entra quando o assistente informa que ela está inclusa, com uma estrutura por unidade. Copos long drink, squeezes, tirantes e brindes ecológicos têm base e personalização calculadas por peça, usando custos unitários configurados pela gráfica. Nos presets genéricos desses quatro brindes, material e técnica são respostas descritivas para a produção e não alteram automaticamente o custo: cadastre custo compatível com a combinação comercializada ou crie um preset específico antes de aprovar.
+
 ## Executar e validar
 
 ```powershell

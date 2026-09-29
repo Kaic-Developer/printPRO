@@ -30,6 +30,8 @@ final class QuoteComponentRequirements
             'product-menu' => $this->menu($answers),
             'product-banner' => $this->simpleBanner($answers),
             'product-mug' => $this->mug($answers),
+            'product-roll-up' => $this->rollUp($answers),
+            'product-long-drink-cup', 'product-squeeze', 'product-lanyard', 'product-eco-gift' => $this->genericGift($product->code),
             'product-labels-roll-sheet' => $this->labels($answers),
             'product-workwear', 'product-sweatshirt', 'product-apron', 'product-cap' => $this->textileGarment($product->code, $answers),
             default => [],
@@ -44,6 +46,7 @@ final class QuoteComponentRequirements
         $choiceGroup = match ($product->code) {
             'product-mug' => ['material-gift-mug-ceramic', 'material-gift-mug-polymer', 'process-sublimation', 'process-gift-printing'],
             'product-labels-roll-sheet' => ['material-label-roll-stock', 'material-label-sheet-stock'],
+            'product-roll-up' => ['material-roll-up-stand'],
             'product-frontlight-banner' => ['material-frontlight-440g', 'material-frontlight-500g', 'material-backlight', 'material-mesh', 'material-sublimation-fabric'],
             'product-acrylic-cutout' => ['material-acrylic-sheet', 'material-acrylic-cast-2mm', 'material-acrylic-cast-3mm', 'material-acrylic-cast-4mm', 'material-acrylic-cast-5mm', 'material-acrylic-cast-6mm', 'material-acrylic-cast-8mm', 'material-acrylic-cast-10mm', 'material-ps-sheet', 'material-expanded-pvc-sheet', 'material-polycarbonate-sheet', 'process-laser-cut', 'process-router-cut', 'process-laser-router-cut', 'process-thermal-bending'],
             'print-business-card' => ['material-cardstock-250g', 'material-cardstock-300g', 'material-card-pvc-075'],
@@ -73,6 +76,7 @@ final class QuoteComponentRequirements
             'product-mug' => $this->mug($answers),
             'product-labels-roll-sheet' => [$this->labels($answers)[0]],
             'product-frontlight-banner' => [$this->banner($answers)[0]],
+            'product-roll-up' => $this->rollUp($answers),
             'product-acrylic-cutout' => $this->acrylicCutout($answers),
             'print-business-card' => [$this->businessCard($answers)[0]],
             'product-presentation-folder' => [$this->presentationFolder($answers)[0]],
@@ -235,6 +239,27 @@ final class QuoteComponentRequirements
     }
 
     /** A apresentação escolhida para o rótulo determina o substrato e o corte. */
+    /** A estrutura e a impressão são distintas; a base só entra quando foi solicitada. */
+    private function rollUp(array $answers): array
+    {
+        $required = ['material-frontlight-440g', 'process-large-format-print'];
+        if ($this->isTrue($answers['stand_included'] ?? false)) $required[] = 'material-roll-up-stand';
+        return $required;
+    }
+
+    /** Cada brinde exige sua base cadastrada e o serviço de personalização. */
+    private function genericGift(string $productCode): array
+    {
+        $material = match ($productCode) {
+            'product-long-drink-cup' => 'material-gift-long-drink-cup',
+            'product-squeeze' => 'material-gift-squeeze',
+            'product-lanyard' => 'material-gift-lanyard',
+            'product-eco-gift' => 'material-eco-gift-base',
+            default => '',
+        };
+        return [$material, 'process-gift-printing'];
+    }
+
     private function labels(array $answers): array
     {
         $material = match ($answers['format'] ?? '') {

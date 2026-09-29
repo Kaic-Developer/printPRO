@@ -139,6 +139,31 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         if (thermalBending && ['0', '1'].includes(answer('thermal_bend'))) thermalBending.checked = answer('thermal_bend') === '1';
     };
 
+    const syncRollUpAndGiftComponents = (panel) => {
+        const productCode = panel.dataset.presetPanel;
+        const giftMaterials = {
+            'product-long-drink-cup': 'material-gift-long-drink-cup',
+            'product-squeeze': 'material-gift-squeeze',
+            'product-lanyard': 'material-gift-lanyard',
+            'product-eco-gift': 'material-eco-gift-base',
+        };
+        const material = giftMaterials[productCode];
+        if (productCode !== 'product-roll-up' && !material) return;
+        const answer = (key) => panel.querySelector(`[data-wizard-field="${CSS.escape(key)}"] select`)?.value;
+        const required = productCode === 'product-roll-up'
+            ? ['material-frontlight-440g', 'process-large-format-print', ...(answer('stand_included') === '1' ? ['material-roll-up-stand'] : [])]
+            : [material, 'process-gift-printing'];
+        const controlled = productCode === 'product-roll-up'
+            ? ['material-frontlight-440g', 'material-roll-up-stand', 'process-large-format-print']
+            : [material, 'process-gift-printing'];
+        panel.querySelectorAll('[data-component-code]').forEach((row) => {
+            if (!controlled.includes(row.dataset.componentCode)) return;
+            if (productCode === 'product-roll-up' && row.dataset.componentCode === 'material-roll-up-stand' && !['0', '1'].includes(answer('stand_included'))) return;
+            const checkbox = row.querySelector('[name$="[selected]"]');
+            if (checkbox) checkbox.checked = required.includes(row.dataset.componentCode);
+        });
+    };
+
     const syncTextilePrintDimensions = (panel) => {
         if (panel.dataset.presetPanel !== 'product-basic-tshirt') return;
         const selectedSize = panel.querySelector('[data-wizard-field="print_size"] select')?.value;
@@ -247,6 +272,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         const keyMap = {
             'sign-facade': ['width_m', 'height_m', 1000],
             'product-frontlight-banner': ['width_m', 'height_m', 1000],
+            'product-roll-up': ['width_mm', 'height_mm', 1],
             'product-printed-adhesive': ['width_m', 'height_m', 1000],
             'print-business-card': ['width_mm', 'height_mm', 1],
             'product-acrylic-cutout': ['width_mm', 'height_mm', 1],
@@ -274,6 +300,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         const schema = {
             'sign-facade': { key: 'acm_thickness', values: { '3mm': 'material-acm-3mm', '4mm': 'material-acm-4mm' } },
             'product-frontlight-banner': { key: 'material', values: { 'frontlight-440g': 'material-frontlight-440g', 'frontlight-500g': 'material-frontlight-500g', backlight: 'material-backlight', mesh: 'material-mesh', 'sublimation-fabric': 'material-sublimation-fabric' } },
+            'product-roll-up': { key: 'stand_included', values: { '0': 'material-frontlight-440g', '1': 'material-frontlight-440g' } },
             'product-printed-adhesive': { key: 'material', values: { monomeric: 'material-vinyl-monomeric', polymeric: 'material-vinyl-polymeric', perforated: 'material-vinyl-perforated', frosted: 'material-vinyl-frosted', 'static-cling': 'material-vinyl-static-cling' } },
             'print-business-card': { key: 'stock', values: { 'couche-250g': 'material-cardstock-250g', 'couche-300g': 'material-cardstock-300g', 'pvc-075': 'material-card-pvc-075' } },
             'product-presentation-folder': { key: 'stock', values: { 'couche-300g': 'material-couche-300g' } },
@@ -406,6 +433,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 updateConditionalFields(panel);
                 updateComponentSuggestions(panel);
                 syncAcrylicComponentChoices(panel);
+                syncRollUpAndGiftComponents(panel);
                 syncTextilePrintDimensions(panel);
                 updateWizardQuantityManagement(panel);
                 updateNestingMaterialOptions(panel);
@@ -463,6 +491,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         updateConditionalFields(panel);
         updateComponentSuggestions(panel);
         syncAcrylicComponentChoices(panel);
+        syncRollUpAndGiftComponents(panel);
         syncTextilePrintDimensions(panel);
         updateWizardQuantityManagement(panel);
         updateNestingMaterialOptions(panel);
@@ -483,6 +512,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             if (field && panel) {
                 updateConditionalFields(panel);
                 syncAcrylicComponentChoices(panel);
+                syncRollUpAndGiftComponents(panel);
                 syncTextilePrintDimensions(panel);
                 updateWizardQuantityManagement(panel);
                 if (event.target.matches('select')) updateComponentSuggestions(panel);

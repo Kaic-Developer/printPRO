@@ -21,10 +21,10 @@ Fluxos implementados: organização, login, painel, clientes, catálogo comercia
 - Cadastro da gráfica e proprietário, login com limite de tentativas e logout.
 - Clientes e catálogo comercial isolados por organização.
 - Financeiro inicial com entradas/saídas, valores em centavos, filtro mensal e gráfico baseado em dados reais.
-- 169 presets iniciais para comunicação visual, gráfica rápida, têxtil/uniformes e brindes/rótulos, sem custos ou preços assumidos.
+- 173 entradas no catálogo técnico inicial, incluindo 28 produtos pré-configurados para comunicação visual, gráfica rápida, têxtil/uniformes e brindes/rótulos, sem custos ou preços assumidos.
 - Ativação por organização, custo unitário informado pelo usuário, perda percentual e multiplicador de markup opcionais até configuração.
 - Wizard declarativo com múltiplas linhas, schema versionado, campos condicionais e grade têxtil.
-- Estimativa integrada por item para presets de fachada, frontlight, adesivo impresso, cartão, folders, flyer, rótulo e acrílico/plásticos; perfil de largura/comprimento configurável por gráfica, snapshot preservado e consumo identificado como manual ou calculado. Chapas/folhas cobram unidades inteiras; bobinas usam comprimento ou área real consumida, sem descartar sobras. A geometria é uma grade retangular simples, não nesting ótimo.
+- Estimativa integrada por item para presets de fachada, frontlight, roll-up, adesivo impresso, cartão, folders, flyer, rótulo e acrílico/plásticos; perfil de largura/comprimento configurável por gráfica, snapshot preservado e consumo identificado como manual ou calculado. Chapas/folhas cobram unidades inteiras; bobinas usam comprimento ou área real consumida, sem descartar sobras. A geometria é uma grade retangular simples, não nesting ótimo.
 - Orçamentos com snapshots imutáveis, valores exatos em centavos, revisões e aprovação bloqueada quando faltam custos/fatores.
 - Aprovação gera ordens de produção por setor e a repetição do comando não duplica ordens.
 - API v1 para autenticação por token, catálogo, configuração, orçamento, nesting e ordens de produção.
@@ -35,6 +35,7 @@ Fluxos implementados: organização, login, painel, clientes, catálogo comercia
 
 - Os testes usam SQLite em memória e não devem executar `migrate:fresh` no banco local.
 - Migrations `2026_09_28_000004` e `2026_09_28_000005` aplicadas ao MySQL local; os presets foram sincronizados sem resetar dados. A migration 005 armazena dimensões nominais por material e organização.
-- Última validação: `php artisan test` (90 testes, 638 assertions), `npm.cmd run build`, `php artisan view:cache`, `git diff --check` e revisão cruzada de domínio.
-- O nesting integrado cobre fachada, grandes formatos, adesivo, cartão, flyer/folder promocional, pasta institucional, rótulo em bobina/cartela e acrílico/plásticos, com material e dimensões verificados no servidor. Para bobinas, o estimador escolhe automaticamente a orientação de menor comprimento nas duas grades retangulares avaliadas; confirme a possibilidade de girar a arte. Outros produtos ainda exigem consumo informado pela gráfica.
+- Última validação: `php artisan test` (92 testes, 714 assertions), `npm.cmd run build`, `php artisan view:cache`, `git diff --check` e revisão cruzada de domínio.
+- O nesting integrado cobre fachada, grandes formatos, roll-up, adesivo, cartão, flyer/folder promocional, pasta institucional, rótulo em bobina/cartela e acrílico/plásticos, com material e dimensões verificados no servidor. Para bobinas, o estimador escolhe automaticamente a orientação de menor comprimento nas duas grades retangulares avaliadas; confirme a possibilidade de girar a arte. Outros produtos ainda exigem consumo informado pela gráfica.
+- Roll-up calcula a impressão pela área acabada e quantidade; o nesting calcula separadamente o material com sobras, e estrutura inclusa significa uma unidade por roll-up. Copos long drink, squeezes, tirantes e brindes ecológicos calculam base e personalização por peça com custos configurados. Material e técnica em texto livre são dados descritivos e não mudam o custo genérico automaticamente.
 - Pedidos com acompanhamento de chão de fábrica, atendimento compartilhado, relatórios integrados, contas a pagar/receber e aplicativo nativo continuam no roteiro.

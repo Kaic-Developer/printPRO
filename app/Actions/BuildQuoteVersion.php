@@ -295,6 +295,40 @@ class BuildQuoteVersion
     private function wizardCalculatedQuantities(QuotePreset $product, array $answers, int $lineQuantityMilli, int $index): array
     {
         $personalization = $answers['personalization'] ?? null;
+        if ($product->code === 'product-roll-up') {
+            // A área da impressão usa as dimensões acabadas; o nesting calcula separadamente a sobra da bobina.
+            $width = $this->millimeterInteger($answers['width_mm'] ?? null);
+            $height = $this->millimeterInteger($answers['height_mm'] ?? null);
+            if ($width === null || $height === null || $width < 1 || $height < 1 || $width > 10_000 || $height > 10_000) {
+                throw ValidationException::withMessages(["items.{$index}.answers.width_mm" => 'Informe largura e altura inteiras em milímetros para calcular a impressão do roll-up.']);
+            }
+            $areaMilliPerPiece = intdiv(($width * $height) + 999, 1000);
+            $quantities = ['process-large-format-print' => [
+                'quantity_per_unit_milli' => $areaMilliPerPiece,
+                'quantity_milli' => $this->pricing->multiplyMilli($areaMilliPerPiece, $lineQuantityMilli),
+            ]];
+            if (filter_var($answers['stand_included'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                // Cada roll-up entregue com estrutura consome exatamente uma unidade do suporte.
+                $quantities['material-roll-up-stand'] = [
+                    'quantity_per_unit_milli' => 1000,
+                    'quantity_milli' => $lineQuantityMilli,
+                ];
+            }
+            return $quantities;
+        }
+
+        if (in_array($product->code, ['product-long-drink-cup', 'product-squeeze', 'product-lanyard', 'product-eco-gift'], true)) {
+            // Bases e personalização são cobradas por peça; material e técnica livres ficam descritivos no snapshot.
+            $materialCode = match ($product->code) {
+                'product-long-drink-cup' => 'material-gift-long-drink-cup',
+                'product-squeeze' => 'material-gift-squeeze',
+                'product-lanyard' => 'material-gift-lanyard',
+                'product-eco-gift' => 'material-eco-gift-base',
+            };
+            $perPiece = ['quantity_per_unit_milli' => 1000, 'quantity_milli' => $lineQuantityMilli];
+            return [$materialCode => $perPiece, 'process-gift-printing' => $perPiece];
+        }
+
         if ($product->code === 'product-dtf-dtg-print') {
             $codes = match ($answers['technique'] ?? null) {
                 'dtf' => ['process-dtf-print-size', 'material-textile-dtf-transfer'],
@@ -613,6 +647,7 @@ class BuildQuoteVersion
             'print-business-card', 'product-acrylic-cutout' => ['width_mm', 'height_mm', 'millimeter'],
             'product-presentation-folder', 'product-folder-print' => ['open_width_mm', 'open_height_mm', 'millimeter'],
             'product-flyer' => ['width_mm', 'height_mm', 'millimeter'],
+            'product-roll-up' => ['width_mm', 'height_mm', 'millimeter'],
             'product-labels-roll-sheet' => ['width_mm', 'height_mm', 'millimeter'],
             default => [null, null, null],
         };
@@ -631,6 +666,7 @@ class BuildQuoteVersion
                 'frontlight-440g' => 'material-frontlight-440g', 'frontlight-500g' => 'material-frontlight-500g',
                 'backlight' => 'material-backlight', 'mesh' => 'material-mesh', 'sublimation-fabric' => 'material-sublimation-fabric', default => null,
             },
+            'product-roll-up' => 'material-frontlight-440g',
             'product-printed-adhesive' => match ($answers['material'] ?? null) {
                 'monomeric' => 'material-vinyl-monomeric', 'polymeric' => 'material-vinyl-polymeric',
                 'perforated' => 'material-vinyl-perforated', 'frosted' => 'material-vinyl-frosted',

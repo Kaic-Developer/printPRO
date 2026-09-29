@@ -79,6 +79,7 @@
         $nestingCodeAllowlist = [
             'sign-facade' => ['material-acm-3mm', 'material-acm-4mm'],
             'product-frontlight-banner' => ['material-frontlight-440g', 'material-frontlight-500g', 'material-backlight', 'material-mesh', 'material-sublimation-fabric'],
+            'product-roll-up' => ['material-frontlight-440g'],
             'product-printed-adhesive' => ['material-vinyl-monomeric', 'material-vinyl-polymeric', 'material-vinyl-perforated', 'material-vinyl-frosted', 'material-vinyl-static-cling'],
             'print-business-card' => ['material-cardstock-250g', 'material-cardstock-300g', 'material-card-pvc-075'],
             'product-presentation-folder' => ['material-couche-300g'],

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Actions\RegisterOwner;
 use App\Models\OrganizationQuoteSetting;
+use App\Models\ProductionOrder;
 use App\Models\Quote;
 use App\Models\QuoteItem;
 use App\Models\QuotePreset;
@@ -31,6 +32,11 @@ class QuoteNestingIntegrationTest extends TestCase
             'product-acrylic-cutout' => ['material-acrylic-cast-3mm', 'process-laser-cut'],
             'product-basic-tshirt' => ['material-cotton-menegotti', 'process-silk-screen'],
             'product-labels-roll-sheet' => ['material-label-roll-stock', 'process-label-printing'],
+            'product-roll-up' => ['material-frontlight-440g', 'process-large-format-print'],
+            'product-long-drink-cup' => ['material-gift-long-drink-cup', 'process-gift-printing'],
+            'product-squeeze' => ['material-gift-squeeze', 'process-gift-printing'],
+            'product-lanyard' => ['material-gift-lanyard', 'process-gift-printing'],
+            'product-eco-gift' => ['material-eco-gift-base', 'process-gift-printing'],
             default => ['material-cardstock-300g', 'process-sheet-print'],
         };
         $material = QuotePreset::query()->where('code', $materialCode)->firstOrFail();
@@ -58,6 +64,11 @@ class QuoteNestingIntegrationTest extends TestCase
             'sign-facade' => ['structure_tube' => '20x20', 'reinforcement' => false, 'anti_rust_paint' => false, 'acm_thickness' => '3mm', 'lighting' => 'none', 'requires_munk' => false, 'requires_scaffold' => false, 'height_installation' => false, 'cnc_outsourced' => false, 'galvanizing_outsourced' => false, ...$answers],
             'product-acrylic-cutout' => ['thickness_mm' => '3', 'plastic_type' => 'acrylic-crystal', 'cut_process' => 'laser', 'thermal_bend' => false, ...$answers],
             'product-basic-tshirt' => ['size_grid' => ['P' => 1, 'M' => 1], 'fabric' => 'cotton', 'personalization' => 'silk-screen', ...$answers],
+            'product-roll-up' => ['width_mm' => '850', 'height_mm' => '2000', 'stand_included' => false, ...$answers],
+            'product-long-drink-cup' => ['print_method' => 'sublimation', ...$answers],
+            'product-squeeze' => ['material' => 'aluminium', 'print_method' => 'screen-print', ...$answers],
+            'product-lanyard' => ['width_mm' => '20', 'print_method' => 'sublimation', ...$answers],
+            'product-eco-gift' => ['gift_description' => 'Sacola', 'material' => 'algodao', 'print_method' => 'screen-print', ...$answers],
             default => ['stock' => 'couche-300g', 'print_colors' => '4x0', 'special_die' => false, 'finishes' => [], ...$answers],
         };
         return ['items' => [[
@@ -807,5 +818,79 @@ class QuoteNestingIntegrationTest extends TestCase
         $this->assertSame('process-adhesive-application', $item->components()->where('preset_code', $application->code)->value('preset_code'));
         $this->assertSame('material-vinyl-matte-lamination', $item->components()->where('preset_code', $laminationFilm->code)->value('preset_code'));
         $this->assertSame('process-large-format-print', $item->components()->where('preset_code', $printing->code)->value('preset_code'));
+    }
+
+    public function test_roll_up_and_gift_quotes_block_missing_base_process_and_included_stand(): void
+    {
+        $cases = [
+            ['product-roll-up', ['width_mm' => '850', 'height_mm' => '2000', 'stand_included' => true], 'material-roll-up-stand'],
+            ['product-long-drink-cup', ['print_method' => 'sublimation'], null],
+            ['product-squeeze', ['material' => 'aluminium', 'print_method' => 'screen-print'], null],
+            ['product-lanyard', ['width_mm' => '20', 'print_method' => 'sublimation'], null],
+            ['product-eco-gift', ['gift_description' => 'Sacola', 'material' => 'algodao', 'print_method' => 'screen-print'], null],
+        ];
+
+        foreach ($cases as [$productCode, $answers, $extraMaterial]) {
+            $fixture = $this->fixture($productCode);
+            [$user, , $material, $process] = $fixture;
+            if ($productCode === 'product-roll-up') {
+                $standId = QuotePreset::query()->where('code', 'material-roll-up-stand')->value('id');
+                DB::table('organization_quote_presets')->where('organization_id', $user->organization_id)->where('quote_preset_id', $standId)->update(['unit_cost_cents' => 100]);
+            }
+            $payload = $this->payload($fixture, '1', 1, [], $answers);
+            unset($payload['items'][0]['nesting']);
+            foreach ($payload['items'][0]['components'] as &$component) $component['quantity'] = '1';
+            unset($component);
+
+            if ($extraMaterial !== null) {
+                $payload['items'][0]['components'][] = ['code' => $extraMaterial, 'selected' => true, 'quantity' => '1'];
+            }
+            foreach ([$material->code, $process->code, ...($extraMaterial ? [$extraMaterial] : [])] as $requiredCode) {
+                $omission = $payload;
+                foreach ($omission['items'][0]['components'] as &$component) {
+                    if ($component['code'] === $requiredCode) $component['selected'] = false;
+                }
+                unset($component);
+                $this->actingAs($user)->postJson('/quotes', $omission)
+                    ->assertUnprocessable()
+                    ->assertJsonValidationErrors('items.0.components');
+            }
+            if ($productCode === 'product-roll-up') {
+                $payload['items'][0]['quantity'] = '2';
+                $payload['items'][0]['answers']['quantity'] = '2';
+                $payload['items'][0]['nesting'] = [
+                    'material_code' => $material->code, 'material_type' => 'roll', 'quantity' => 2,
+                    'piece_width_mm' => 850, 'piece_length_mm' => 2000,
+                    'material_width_mm' => 1000, 'gap_mm' => 0,
+                ];
+            }
+            $this->actingAs($user)->post('/quotes', $payload)->assertRedirect();
+            if ($productCode === 'product-roll-up') {
+                $item = QuoteItem::query()->latest('id')->firstOrFail();
+                $this->assertSame('material-frontlight-440g', $item->nesting['material_code']);
+                $this->assertSame(4000, $item->components()->where('preset_code', $material->code)->value('quantity_milli'));
+                $printing = $item->components()->where('preset_code', $process->code)->firstOrFail();
+                $this->assertSame(1700, $printing->quantity_per_unit_milli); // 850 x 2000 mm de arte, sem cobrar a sobra da bobina como impressão.
+                $this->assertSame(3400, $printing->quantity_milli);
+                $this->assertSame('wizard', $printing->quantity_source);
+                $stand = $item->components()->where('preset_code', 'material-roll-up-stand')->firstOrFail();
+                $this->assertSame(1000, $stand->quantity_per_unit_milli);
+                $this->assertSame(2000, $stand->quantity_milli);
+                $this->assertSame('wizard', $stand->quantity_source);
+                $quote = Quote::query()->latest('id')->firstOrFail();
+                $this->actingAs($user)->post('/quotes/'.$quote->id.'/approve')->assertRedirect();
+                $finishingOrder = ProductionOrder::query()->where('quote_id', $quote->id)->where('sector', 'acabamento')->firstOrFail();
+                $standInOrder = collect($finishingOrder->snapshot['components'])->firstWhere('preset_code', 'material-roll-up-stand');
+                $this->assertSame(2000, $standInOrder['quantity_milli']);
+                $this->assertSame('wizard', $standInOrder['quantity_source']);
+            } elseif ($productCode !== 'product-roll-up') {
+                $item = QuoteItem::query()->latest('id')->firstOrFail();
+                foreach ([$material, $process] as $perPieceComponent) {
+                    $snapshot = $item->components()->where('preset_code', $perPieceComponent->code)->firstOrFail();
+                    $this->assertSame(1000, $snapshot->quantity_per_unit_milli);
+                    $this->assertSame('wizard', $snapshot->quantity_source);
+                }
+            }
+        }
     }
 }

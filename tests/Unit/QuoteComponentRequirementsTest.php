@@ -145,6 +145,29 @@ class QuoteComponentRequirementsTest extends TestCase
         );
     }
 
+    public function test_roll_up_structure_and_generic_gift_bases_are_required_when_applicable(): void
+    {
+        $requirements = new QuoteComponentRequirements;
+        $rollUp = new QuotePreset(['code' => 'product-roll-up']);
+        $print = ['material-frontlight-440g', 'process-large-format-print'];
+        $this->assertEqualsCanonicalizing($print, $requirements->missing($rollUp, ['stand_included' => false], []));
+        $this->assertEqualsCanonicalizing([...$print, 'material-roll-up-stand'], $requirements->missing($rollUp, ['stand_included' => true], []));
+        $this->assertSame(['material-roll-up-stand'], $requirements->conflicting($rollUp, ['stand_included' => false], [...$print, 'material-roll-up-stand']));
+
+        $giftBases = [
+            'product-long-drink-cup' => 'material-gift-long-drink-cup',
+            'product-squeeze' => 'material-gift-squeeze',
+            'product-lanyard' => 'material-gift-lanyard',
+            'product-eco-gift' => 'material-eco-gift-base',
+        ];
+        foreach ($giftBases as $productCode => $materialCode) {
+            $gift = new QuotePreset(['code' => $productCode]);
+            $expected = [$materialCode, 'process-gift-printing'];
+            $this->assertEqualsCanonicalizing($expected, $requirements->missing($gift, [], []));
+            $this->assertSame([], $requirements->missing($gift, [], $expected));
+        }
+    }
+
     public function test_mutually_exclusive_material_variants_cannot_both_be_charged(): void
     {
         $requirements = new QuoteComponentRequirements;
