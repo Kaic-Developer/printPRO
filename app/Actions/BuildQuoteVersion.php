@@ -14,6 +14,7 @@ use App\Services\QuotePricingCalculator;
 use App\Services\QuoteComponentRequirements;
 use App\Services\RectangleNestingEstimator;
 use App\Services\QuoteWizardValidator;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -123,6 +124,7 @@ class BuildQuoteVersion
                 ? $this->nestingSnapshot($preset, $answers, $quantityMilli, $input['nesting'], $codes, $user->organization_id, $presetSettings, $index, $areaCopies)
                 : null;
             $wizardQuantities = $this->wizardCalculatedQuantities($preset, $answers, $quantityMilli, $index, $areaCopies);
+            $wizardQuantities = array_replace($wizardQuantities, $this->nestingProcessQuantities($preset, $answers, $nesting, $codes, $componentPresets, $quantityMilli));
 
             $costCents = 0;
             $itemComplete = true;
@@ -295,6 +297,15 @@ class BuildQuoteVersion
     private function wizardCalculatedQuantities(QuotePreset $product, array $answers, int $lineQuantityMilli, int $index, ?int $areaCopies): array
     {
         $personalization = $answers['personalization'] ?? null;
+        if ($product->code === 'product-folder-print') {
+            // Cada dobra vendida corresponde a um vinco por unidade acabada.
+            $foldsPerPiece = (int) ($answers['folds'] ?? 0);
+            return ['process-folding' => [
+                'quantity_per_unit_milli' => $foldsPerPiece * 1000,
+                'quantity_milli' => $this->pricing->multiplyMilli($foldsPerPiece * 1000, $lineQuantityMilli),
+            ]];
+        }
+
         if ($product->code === 'product-roll-up') {
             // A área da impressão usa as dimensões acabadas; o nesting calcula separadamente a sobra da bobina.
             $width = $this->millimeterInteger($answers['width_mm'] ?? null);
@@ -431,7 +442,37 @@ class BuildQuoteVersion
         return array_fill_keys($codes, ['quantity_per_unit_milli' => $areaMilliPerPiece, 'quantity_milli' => $totalAreaMilli]);
     }
 
-    /** Calcula área dos formatos têxteis e aplica quantidades sem converter valores em float. */
+    /** Alinha processos cobrados por folha a mesma pilha estimada pelo nesting. */
+    private function nestingProcessQuantities(QuotePreset $product, array $answers, ?array $nesting, array $selectedCodes, Collection $componentPresets, int $lineQuantityMilli): array
+    {
+        if ($nesting === null || ($nesting['material_type'] ?? null) !== 'sheet') return [];
+
+        $sheetsRequired = filter_var($nesting['sheets_required'] ?? null, FILTER_VALIDATE_INT);
+        if ($sheetsRequired === false || $sheetsRequired < 1) return [];
+        $totalSheetsMilli = $sheetsRequired * 1000;
+        $processCodes = ['process-sheet-print', 'process-cutting', 'process-die-cut-crease'];
+        if ($product->code === 'product-presentation-folder' && ! filter_var($answers['die_cut'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            $processCodes = array_values(array_diff($processCodes, ['process-die-cut-crease']));
+        }
+        $quantities = [];
+        foreach (array_intersect($processCodes, $selectedCodes) as $code) {
+            $component = $componentPresets->get($code);
+            if ($component?->unit !== 'folha') continue;
+
+            // O total usa folhas inteiras; so exibimos consumo por unidade se ele for exato em milesimos.
+            $scaledPerItem = $totalSheetsMilli * 1000;
+            $perItem = $lineQuantityMilli > 0 && $scaledPerItem % $lineQuantityMilli === 0
+                ? intdiv($scaledPerItem, $lineQuantityMilli)
+                : null;
+            $quantities[$code] = [
+                'quantity_per_unit_milli' => $perItem,
+                'quantity_milli' => $totalSheetsMilli,
+            ];
+        }
+        return $quantities;
+    }
+
+    /** Calcula area dos formatos texteis e aplica quantidades sem converter valores em float. */
     private function printAreaQuantities(array $answers, array $codes, int $lineQuantityMilli, int $defaultPositions, int $index, string $customWidthKey, string $customHeightKey, ?string $positionsKey = null): array
     {
         if ($codes === []) return [];

@@ -105,8 +105,12 @@ class QuoteNestingIntegrationTest extends TestCase
         $this->assertSame('nesting', $component->quantity_source);
         $this->assertSame('folha', $component->unit);
         $this->assertSame(200, $component->cost_cents); // 2 chapas × 100 centavos por chapa.
-        $this->assertSame(400, $item->cost_cents); // inclui 200 centavos do processo para quatro unidades.
-        $this->assertSame(400, $version->sale_total_cents); // sem perda e com multiplicador 1× no fixture.
+        $printing = $item->components()->where('preset_code', 'process-sheet-print')->firstOrFail();
+        $this->assertSame(2_000, $printing->quantity_milli);
+        $this->assertSame('wizard', $printing->quantity_source);
+        $this->assertSame(100, $printing->cost_cents); // Duas folhas impressas a 50 centavos cada.
+        $this->assertSame(300, $item->cost_cents);
+        $this->assertSame(300, $version->sale_total_cents); // Sem perda e com multiplicador 1x no fixture.
         $this->assertSame(2, $item->nesting['sheets_required']);
         $this->assertSame('operator_confirmed_dimensions_and_rectangular_grid_estimate', $item->nesting['estimation_basis']);
         $this->assertSame(2_000, $version->snapshot['items'][0]['components'][0]['quantity_milli']);
@@ -524,8 +528,22 @@ class QuoteNestingIntegrationTest extends TestCase
             $this->assertSame($expectedSheetsMilli, $component->quantity_milli);
             $this->assertSame('folha', $component->unit);
             $this->assertSame('nesting', $component->quantity_source);
+            $printing = $item->components()->where('preset_code', 'process-sheet-print')->firstOrFail();
+            $this->assertSame($expectedSheetsMilli, $printing->quantity_milli);
+            $this->assertSame('wizard', $printing->quantity_source);
             $this->assertSame($pieceWidth, $item->nesting['piece_width_mm']);
             $this->assertSame($pieceLength, $item->nesting['piece_length_mm']);
+
+            if ($presetCode === 'product-flyer') {
+                $cutting = $item->components()->where('preset_code', 'process-cutting')->firstOrFail();
+                $this->assertSame($expectedSheetsMilli, $cutting->quantity_milli);
+                $this->assertSame('wizard', $cutting->quantity_source);
+            } else {
+                $folding = $item->components()->where('preset_code', 'process-folding')->firstOrFail();
+                $this->assertSame(2000, $folding->quantity_per_unit_milli);
+                $this->assertSame(10_000, $folding->quantity_milli);
+                $this->assertSame('wizard', $folding->quantity_source);
+            }
         }
 
         $this->actingAs($user)->get('/quotes/create')
@@ -583,9 +601,21 @@ class QuoteNestingIntegrationTest extends TestCase
             'nesting' => ['material_code' => 'material-couche-300g', 'material_type' => 'sheet', 'quantity' => 5, 'piece_width_mm' => 200, 'piece_length_mm' => 100, 'material_width_mm' => 420, 'material_length_mm' => 297, 'gap_mm' => 0],
         ]]];
 
+        $unrequestedDieCut = $payload;
+        $unrequestedDieCut['items'][0]['components'][] = ['code' => 'process-die-cut-crease', 'selected' => true, 'quantity' => '1'];
+        $this->actingAs($user)->postJson('/quotes', $unrequestedDieCut)
+            ->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
+
         $this->actingAs($user)->post('/quotes', $payload)->assertRedirect();
         $payload['items'][0]['answers']['sheet_format'] = 'sra3';
         $this->actingAs($user)->post('/quotes', $payload)->assertSessionHasErrors('items.0.answers.sheet_format');
+        $payload['items'][0]['answers']['sheet_format'] = 'a3';
+        $payload['items'][0]['answers']['die_cut'] = true;
+        $payload['items'][0]['components'][] = ['code' => 'process-die-cut-crease', 'selected' => true, 'quantity' => '1'];
+        $this->actingAs($user)->post('/quotes', $payload)->assertRedirect();
+        $cut = QuoteItem::query()->latest('id')->firstOrFail()->components()->where('preset_code', 'process-die-cut-crease')->firstOrFail();
+        $this->assertSame(2000, $cut->quantity_milli);
+        $this->assertSame('wizard', $cut->quantity_source);
     }
 
     private function enableMaterial(User $user, string $materialCode): QuotePreset

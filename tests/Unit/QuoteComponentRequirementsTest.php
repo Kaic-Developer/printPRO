@@ -214,6 +214,24 @@ class QuoteComponentRequirementsTest extends TestCase
         );
     }
 
+    public function test_folder_die_cut_component_must_match_optional_wizard_answer(): void
+    {
+        $requirements = new QuoteComponentRequirements;
+        $folder = new QuotePreset(['code' => 'product-presentation-folder']);
+        $base = ['material-couche-300g', 'process-sheet-print'];
+
+        $this->assertSame([], $requirements->conflicting($folder, ['stock' => 'couche-300g', 'die_cut' => false], $base));
+        $this->assertSame(
+            ['process-die-cut-crease'],
+            $requirements->conflicting($folder, ['stock' => 'couche-300g', 'die_cut' => false], [...$base, 'process-die-cut-crease']),
+        );
+        $this->assertSame([], $requirements->conflicting(
+            $folder,
+            ['stock' => 'couche-300g', 'die_cut' => true],
+            [...$base, 'process-die-cut-crease'],
+        ));
+    }
+
     public function test_apparel_presets_require_the_selected_base_and_customization_supplies(): void
     {
         $requirements = new QuoteComponentRequirements;

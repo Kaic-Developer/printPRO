@@ -88,6 +88,10 @@ Rótulos agora podem usar a estimativa integrada de bobina ou cartela: o formato
 
 ## Wizard e nesting
 
+Nos presets impressos com nesting por folha, os processos cadastrados em `folha` (impressao, corte e vinco, quando selecionados) usam o total inteiro de folhas estimado pelo nesting. No preset de folder promocional, o processo de dobra usa os vincos escolhidos multiplicados pela tiragem. As tarifas continuam sendo as que a grafica cadastrar; esta regra calcula somente as quantidades.
+
+Na pasta institucional, o corte e vinco permanece opcional: nesting nao o inclui quando `die_cut` e falso, e a API rejeita uma linha adicionada manualmente nesse caso. Quando marcado, o processo usa as folhas inteiras da estimativa.
+
 Os schemas são declarativos (`version`, `fields`, `type`, `options`, `visible_when`) e validados novamente no servidor contra o preset armazenado. Tipos suportados: `boolean`, `decimal`, `integer`, `text`, `select`, `multiselect` e `size_grid`.
 
 O estimador aceita dimensões inteiras em milímetros e testa duas grades retangulares, com e sem rotação. Em chapa, informa folhas necessárias, aproveitamento e área descartada. Em bobina, estima comprimento a consumir pela largura e orientação escolhida. Não faz nesting irregular/ótimo, não calcula sangria fora do campo de espaçamento e não inventa dimensão de mídia; o retorno deve ser tratado como estimativa.

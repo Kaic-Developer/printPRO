@@ -18,6 +18,8 @@ Fluxos implementados: organização, login, painel, clientes, catálogo comercia
 
 ## Entregas
 
+- Com nesting em folhas, impressao/corte/corte e vinco calculam consumo em folhas inteiras; folders calculam vincos pela quantidade de dobras e pela tiragem. Os custos unitarios permanecem configurados pela grafica.
+
 - Cadastro da gráfica e proprietário, login com limite de tentativas e logout.
 - Clientes e catálogo comercial isolados por organização.
 - Financeiro inicial com entradas/saídas, valores em centavos, filtro mensal e gráfico baseado em dados reais.
@@ -35,7 +37,7 @@ Fluxos implementados: organização, login, painel, clientes, catálogo comercia
 
 - Os testes usam SQLite em memória e não devem executar `migrate:fresh` no banco local.
 - Migrations `2026_09_28_000004` e `2026_09_28_000005` aplicadas ao MySQL local; os presets foram sincronizados sem resetar dados. A migration 005 armazena dimensões nominais por material e organização.
-- Última suíte completa: `php artisan test` (93 testes, 767 assertions), `npm.cmd run build`, `php artisan view:cache` e `git diff --check`; revisão cruzada sem novos achados.
+- Última suíte completa: `php artisan test` (94 testes, 788 assertions), `npm.cmd run build`, `php artisan view:cache` e `git diff --check`; revisão cruzada sem novos achados.
 - O nesting integrado cobre fachada, grandes formatos, roll-up, adesivo, cartão, flyer/folder promocional, pasta institucional, rótulo em bobina/cartela e acrílico/plásticos, com material e dimensões verificados no servidor. Para bobinas, o estimador escolhe automaticamente a orientação de menor comprimento nas duas grades retangulares avaliadas; confirme a possibilidade de girar a arte. Outros produtos ainda exigem consumo informado pela gráfica.
 - Lona, banner e adesivo calculam impressão, aplicação e laminação selecionadas pela área vendida em m²; o nesting calcula separadamente o material de base com as sobras. Banner aplica um kit de bastões/cordinha por cópia quando selecionado. Roll-up calcula impressão pela área acabada, uma estrutura por unidade quando inclusa, e material de bobina com sobras. Copos long drink, squeezes, tirantes e brindes ecológicos calculam base e personalização por peça com custos configurados. Material e técnica em texto livre são dados descritivos e não mudam o custo genérico automaticamente.
 - O wizard de adesivos sincroniza e exibe apenas o vinil, filme, acabamento e recorte compatíveis com as respostas atuais; mudanças de opção limpam componentes antigos antes do envio.

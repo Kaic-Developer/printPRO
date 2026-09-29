@@ -251,7 +251,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             : productCode === 'product-printed-adhesive'
                 ? ['process-large-format-print', 'process-adhesive-application', ...(laminationMaterial ? ['finish-vinyl-lamination', laminationMaterial] : [])]
                 : [];
-        const managedCodes = productCode === 'product-dtf-dtg-print'
+        const calculatedCodes = productCode === 'product-dtf-dtg-print'
             ? ({ dtf: ['process-dtf-print-size', 'material-textile-dtf-transfer'], dtg: ['process-dtg-print-size'] })[panel.querySelector('[data-wizard-field="technique"] select')?.value] ?? []
             : productCode === 'product-basic-tshirt'
             ? ({
@@ -265,19 +265,43 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 : textileProducts.includes(productCode) && personalization === 'embroidery'
                     ? ['process-computerized-embroidery', ...(panel.querySelector('[data-wizard-field="embroidery_matrix"] select')?.value === '1' ? ['third-party-embroidery-matrix'] : [])]
                     : areaPricedCodes;
+        const hasSheetNesting = panel.querySelector('[data-nesting-toggle]')?.checked === true
+            && panel.querySelector('[data-nesting-field="material_type"]')?.value === 'sheet';
+        const nestingProcessCodes = hasSheetNesting
+            ? [
+                'process-sheet-print',
+                ...(productCode === 'product-flyer' ? ['process-cutting'] : []),
+                ...(productCode === 'product-presentation-folder' && panel.querySelector('[data-wizard-field="die_cut"] select')?.value === '1'
+                    ? ['process-die-cut-crease']
+                    : []),
+            ]
+            : [];
+        const foldProcessCodes = productCode === 'product-folder-print' ? ['process-folding'] : [];
+        const dieCutNotRequested = productCode === 'product-presentation-folder'
+            && panel.querySelector('[data-wizard-field="die_cut"] select')?.value === '0';
+        const managedCodes = [...new Set([...calculatedCodes, ...nestingProcessCodes, ...foldProcessCodes])];
         const colors = ['silk_front_colors', 'silk_back_colors'].reduce((total, key) => total + (Number(panel.querySelector(`[data-wizard-field="${key}"] input`)?.value) || 0), 0);
         const stitches = Number(panel.querySelector('[data-wizard-field="estimated_stitches"] input')?.value) || 0;
         panel.querySelectorAll('[data-component-code]').forEach((row) => {
             const wasManaged = row.classList.contains('wizard-quantity-managed');
+            const wasNestingManaged = row.classList.contains('nesting-quantity-managed');
             const managed = managedCodes.includes(row.dataset.componentCode);
+            const nestingManaged = nestingProcessCodes.includes(row.dataset.componentCode);
             const quantityInput = row.querySelector('[name$="[quantity]"]');
             const quantityBlock = quantityInput?.closest('.wizard-component-quantity');
             const autoLabel = row.querySelector('[data-wizard-managed-label]');
+            if (row.dataset.componentCode === 'process-die-cut-crease' && productCode === 'product-presentation-folder') {
+                row.hidden = dieCutNotRequested;
+                if (dieCutNotRequested) {
+                    const checkbox = row.querySelector('[name$="[selected]"]');
+                    if (checkbox) checkbox.checked = false;
+                }
+            }
             if (wasManaged && !managed && quantityInput) {
                 quantityInput.value = '';
                 quantityInput.disabled = false;
                 const checkbox = row.querySelector('[name$="[selected]"]');
-                if (checkbox) checkbox.checked = false;
+                if (checkbox && !wasNestingManaged) checkbox.checked = false;
             }
             if (managed && quantityInput) {
                 quantityInput.disabled = true;
@@ -290,6 +314,10 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 if (managed) {
                     const code = row.dataset.componentCode;
                     const message = ({
+                        'process-sheet-print': 'Calculado pelo total de folhas inteiras previsto no nesting.',
+                        'process-cutting': 'Calculado pelo total de folhas inteiras previsto no nesting.',
+                        'process-die-cut-crease': 'Calculado pelo total de folhas inteiras previsto no nesting.',
+                        'process-folding': 'Calculado pelo numero de dobras multiplicado pelas unidades do pedido.',
                         'material-silk-screen-screen': `Calculada uma vez nesta linha: ${colors} tela(s), conforme as cores na frente e no verso.`,
                         'material-silk-screen-film': `Calculado uma vez nesta linha: ${colors} fotolito(s), conforme as cores na frente e no verso.`,
                         'material-silk-screen-ink': `Calculada por peça: ${colors} aplicação(ões) de cor × quantidade de peças.`,
@@ -308,6 +336,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 }
             }
             row.classList.toggle('wizard-quantity-managed', managed);
+            row.classList.toggle('nesting-quantity-managed', nestingManaged);
         });
     };
 
@@ -611,9 +640,13 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             }
             const nestingEditor = event.target.closest('[data-nesting-editor]');
             if (nestingEditor && panel) {
-                if (event.target.matches('[data-nesting-toggle]')) updateNestingAvailability(panel);
+                if (event.target.matches('[data-nesting-toggle]')) {
+                    updateNestingAvailability(panel);
+                    updateWizardQuantityManagement(panel);
+                }
                 if (event.target.matches('[data-nesting-field="material_type"]')) {
                     updateNestingAvailability(panel);
+                    updateWizardQuantityManagement(panel);
                     clearNestingPreview(nestingEditor);
                 }
                 if (event.target.matches('[data-nesting-field="material_code"]')) {
