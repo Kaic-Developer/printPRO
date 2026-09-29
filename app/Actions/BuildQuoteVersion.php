@@ -297,6 +297,10 @@ class BuildQuoteVersion
     private function wizardCalculatedQuantities(QuotePreset $product, array $answers, int $lineQuantityMilli, int $index, ?int $areaCopies): array
     {
         $personalization = $answers['personalization'] ?? null;
+        if ($product->code === 'product-labels-roll-sheet') {
+            return $this->labelQuantities($answers, $lineQuantityMilli, $index);
+        }
+
         if ($product->code === 'product-folder-print') {
             // Cada dobra vendida corresponde a um vinco por unidade acabada.
             $foldsPerPiece = (int) ($answers['folds'] ?? 0);
@@ -470,6 +474,42 @@ class BuildQuoteVersion
             ];
         }
         return $quantities;
+    }
+
+    /** Calcula a area impressa dos rotulos sem incluir a sobra de estoque do nesting. */
+    private function labelQuantities(array $answers, int $lineQuantityMilli, int $index): array
+    {
+        $widthMilliMm = $this->millimeterMilli($answers['width_mm'] ?? null);
+        $heightMilliMm = $this->millimeterMilli($answers['height_mm'] ?? null);
+        if ($widthMilliMm === null || $heightMilliMm === null
+            || $widthMilliMm < 1000 || $heightMilliMm < 1000
+            || $widthMilliMm > 10_000_000 || $heightMilliMm > 10_000_000
+            || $lineQuantityMilli < 1000 || $lineQuantityMilli % 1000 !== 0) {
+            throw ValidationException::withMessages(["items.{$index}.answers.width_mm" => 'Informe dimensoes de rotulo de 1 a 10000 mm e uma quantidade inteira para calcular a impressao.']);
+        }
+
+        // O schema limita a tiragem a um milhao; dividir por partes mantem a area inteira dentro do limite.
+        $labelCount = intdiv($lineQuantityMilli, 1000);
+        $areaNumerator = $widthMilliMm * $heightMilliMm;
+        $areaDenominator = 1_000_000_000;
+        $wholeMilliPerLabel = intdiv($areaNumerator, $areaDenominator);
+        $fractionNumerator = $areaNumerator % $areaDenominator;
+        $totalAreaMilli = $wholeMilliPerLabel * $labelCount
+            + intdiv(($fractionNumerator * $labelCount) + $areaDenominator - 1, $areaDenominator);
+        $perLabelMilli = $labelCount > 0 && $totalAreaMilli % $labelCount === 0
+            ? intdiv($totalAreaMilli, $labelCount)
+            : null;
+
+        return [
+            'process-label-printing' => [
+                'quantity_per_unit_milli' => $perLabelMilli,
+                'quantity_milli' => $totalAreaMilli,
+            ],
+            'process-label-die-cut' => [
+                'quantity_per_unit_milli' => 1000,
+                'quantity_milli' => $lineQuantityMilli,
+            ],
+        ];
     }
 
     /** Calcula area dos formatos texteis e aplica quantidades sem converter valores em float. */
@@ -774,6 +814,13 @@ class BuildQuoteVersion
         [$whole, $fraction] = array_pad(preg_split('/[.,]/', $value, 2), 2, '0');
         $milli = (int) $whole * 1000 + (int) str_pad($fraction, 3, '0');
         return $milli % 1000 === 0 ? intdiv($milli, 1000) : null;
+    }
+
+    private function millimeterMilli(mixed $value): ?int
+    {
+        if (! is_string($value) && ! is_int($value)) return null;
+        if (! preg_match('/\A(\d{1,7})(?:[.,](\d{1,3}))?\z/', (string) $value, $parts)) return null;
+        return (int) $parts[1] * 1000 + (int) str_pad($parts[2] ?? '', 3, '0');
     }
 
     private function meterMilli(mixed $value): ?int

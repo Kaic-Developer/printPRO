@@ -414,7 +414,7 @@ class QuoteNestingIntegrationTest extends TestCase
         );
 
         $scenarios = [
-            ['roll', 'material-label-roll-stock', 'roll', 1000, null, 30, 'm²'],
+            ['roll', 'material-label-roll-stock', 'roll', 1000, null, 50, 'm²'],
             ['sheet', 'material-label-sheet-stock', 'sheet', 500, 700, 1000, 'folha'],
         ];
         foreach ($scenarios as [$format, $materialCode, $materialType, $materialWidth, $materialLength, $expectedConsumption, $expectedUnit]) {
@@ -430,7 +430,7 @@ class QuoteNestingIntegrationTest extends TestCase
                 'piece_width_mm' => 50,
                 'piece_length_mm' => 30,
                 'material_width_mm' => $materialWidth,
-                'gap_mm' => 0,
+                'gap_mm' => $materialType === 'roll' ? 2 : 0,
             ];
             if ($materialType === 'sheet') $nesting['material_length_mm'] = $materialLength;
 
@@ -452,6 +452,13 @@ class QuoteNestingIntegrationTest extends TestCase
             $this->assertSame($expectedUnit, $component->unit);
             $this->assertSame('nesting', $component->quantity_source);
             $this->assertSame($materialCode, $item->nesting['material_code']);
+
+            $printing = $item->components()->where('preset_code', 'process-label-printing')->firstOrFail();
+            $this->assertSame(30, $printing->quantity_milli);
+            $this->assertSame('wizard', $printing->quantity_source);
+            $dieCut = $item->components()->where('preset_code', 'process-label-die-cut')->firstOrFail();
+            $this->assertSame(20_000, $dieCut->quantity_milli);
+            $this->assertSame('wizard', $dieCut->quantity_source);
         }
 
         foreach ([

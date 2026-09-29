@@ -277,9 +277,12 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             ]
             : [];
         const foldProcessCodes = productCode === 'product-folder-print' ? ['process-folding'] : [];
+        const labelProcessCodes = productCode === 'product-labels-roll-sheet'
+            ? ['process-label-printing', 'process-label-die-cut']
+            : [];
         const dieCutNotRequested = productCode === 'product-presentation-folder'
             && panel.querySelector('[data-wizard-field="die_cut"] select')?.value === '0';
-        const managedCodes = [...new Set([...calculatedCodes, ...nestingProcessCodes, ...foldProcessCodes])];
+        const managedCodes = [...new Set([...calculatedCodes, ...nestingProcessCodes, ...foldProcessCodes, ...labelProcessCodes])];
         const colors = ['silk_front_colors', 'silk_back_colors'].reduce((total, key) => total + (Number(panel.querySelector(`[data-wizard-field="${key}"] input`)?.value) || 0), 0);
         const stitches = Number(panel.querySelector('[data-wizard-field="estimated_stitches"] input')?.value) || 0;
         panel.querySelectorAll('[data-component-code]').forEach((row) => {
@@ -318,6 +321,8 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                         'process-cutting': 'Calculado pelo total de folhas inteiras previsto no nesting.',
                         'process-die-cut-crease': 'Calculado pelo total de folhas inteiras previsto no nesting.',
                         'process-folding': 'Calculado pelo numero de dobras multiplicado pelas unidades do pedido.',
+                        'process-label-printing': 'Calculado pela area efetivamente impressa nos rotulos, sem as sobras do nesting.',
+                        'process-label-die-cut': 'Calculado com um corte por rotulo produzido.',
                         'material-silk-screen-screen': `Calculada uma vez nesta linha: ${colors} tela(s), conforme as cores na frente e no verso.`,
                         'material-silk-screen-film': `Calculado uma vez nesta linha: ${colors} fotolito(s), conforme as cores na frente e no verso.`,
                         'material-silk-screen-ink': `Calculada por peça: ${colors} aplicação(ões) de cor × quantidade de peças.`,
