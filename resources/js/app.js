@@ -230,6 +230,22 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         });
     };
 
+    // O numero de vias selecionado define o unico estoque autocopiativo da ficha.
+    const syncCarbonlessComponents = (panel) => {
+        if (panel.dataset.presetPanel !== 'product-carbonless-pads') return;
+        const copies = panel.querySelector('[data-wizard-field="copies"] select')?.value;
+        const materialCode = ({ '2': 'material-carbonless-2-part', '3': 'material-carbonless-3-part' })[copies];
+        panel.querySelectorAll('[data-component-code]').forEach((row) => {
+            const code = row.dataset.componentCode;
+            if (!['material-carbonless-2-part', 'material-carbonless-3-part', 'process-sequential-numbering'].includes(code)) return;
+            const selected = code === materialCode
+                || (code === 'process-sequential-numbering' && panel.querySelector('[data-wizard-field="sequential_numbering"] select')?.value === '1');
+            row.hidden = !selected;
+            const checkbox = row.querySelector('[name$="[selected]"]');
+            if (checkbox) checkbox.checked = selected;
+        });
+    };
+
     const syncTextilePrintDimensions = (panel) => {
         if (panel.dataset.presetPanel !== 'product-basic-tshirt') return;
         const selectedSize = panel.querySelector('[data-wizard-field="print_size"] select')?.value;
@@ -306,9 +322,13 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         const bindingProcessCodes = ['product-agenda-notebook', 'product-menu'].includes(productCode)
             ? [bindingCodes[panel.querySelector('[data-wizard-field="binding"] select')?.value]].filter(Boolean)
             : [];
+        const copies = panel.querySelector('[data-wizard-field="copies"] select')?.value;
+        const carbonlessCodes = productCode === 'product-carbonless-pads'
+            ? [({ '2': 'material-carbonless-2-part', '3': 'material-carbonless-3-part' })[copies], 'process-sheet-print'].filter(Boolean)
+            : [];
         const dieCutNotRequested = productCode === 'product-presentation-folder'
             && panel.querySelector('[data-wizard-field="die_cut"] select')?.value === '0';
-        const managedCodes = [...new Set([...calculatedCodes, ...nestingProcessCodes, ...foldProcessCodes, ...labelProcessCodes, ...bindingProcessCodes])];
+        const managedCodes = [...new Set([...calculatedCodes, ...nestingProcessCodes, ...foldProcessCodes, ...labelProcessCodes, ...bindingProcessCodes, ...carbonlessCodes])];
         const colors = ['silk_front_colors', 'silk_back_colors'].reduce((total, key) => total + (Number(panel.querySelector(`[data-wizard-field="${key}"] input`)?.value) || 0), 0);
         const stitches = Number(panel.querySelector('[data-wizard-field="estimated_stitches"] input')?.value) || 0;
         panel.querySelectorAll('[data-component-code]').forEach((row) => {
@@ -343,7 +363,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 if (managed) {
                     const code = row.dataset.componentCode;
                     const message = ({
-                        'process-sheet-print': 'Calculado pelo total de folhas inteiras previsto no nesting.',
+                        'process-sheet-print': 'Calculado pelo total de folhas inteiras necessarias nesta ficha.',
                         'process-cutting': 'Calculado pelo total de folhas inteiras previsto no nesting.',
                         'process-die-cut-crease': 'Calculado pelo total de folhas inteiras previsto no nesting.',
                         'process-folding': 'Calculado pelo numero de dobras multiplicado pelas unidades do pedido.',
@@ -352,6 +372,8 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                         'finish-binding-spiral': 'Calculada uma encadernacao para cada exemplar acabado.',
                         'finish-binding-wire-o': 'Calculada uma encadernacao para cada exemplar acabado.',
                         'finish-binding-hardcover': 'Calculada uma encadernacao para cada exemplar acabado.',
+                        'material-carbonless-2-part': 'Calculado pelas folhas por bloco, vias selecionadas e quantidade do pedido.',
+                        'material-carbonless-3-part': 'Calculado pelas folhas por bloco, vias selecionadas e quantidade do pedido.',
                         'material-silk-screen-screen': `Calculada uma vez nesta linha: ${colors} tela(s), conforme as cores na frente e no verso.`,
                         'material-silk-screen-film': `Calculado uma vez nesta linha: ${colors} fotolito(s), conforme as cores na frente e no verso.`,
                         'material-silk-screen-ink': `Calculada por peça: ${colors} aplicação(ões) de cor × quantidade de peças.`,
@@ -572,6 +594,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 syncBannerComponents(panel);
                 syncRollUpAndGiftComponents(panel);
                 syncBindingComponents(panel);
+                syncCarbonlessComponents(panel);
                 syncTextilePrintDimensions(panel);
                 updateWizardQuantityManagement(panel);
                 updateNestingMaterialOptions(panel);
@@ -633,6 +656,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         syncBannerComponents(panel);
         syncRollUpAndGiftComponents(panel);
         syncBindingComponents(panel);
+        syncCarbonlessComponents(panel);
         syncTextilePrintDimensions(panel);
         updateWizardQuantityManagement(panel);
         updateNestingMaterialOptions(panel);
@@ -657,6 +681,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 syncBannerComponents(panel);
                 syncRollUpAndGiftComponents(panel);
                 syncBindingComponents(panel);
+                syncCarbonlessComponents(panel);
                 syncTextilePrintDimensions(panel);
                 updateWizardQuantityManagement(panel);
                 if (event.target.matches('select')) updateComponentSuggestions(panel);

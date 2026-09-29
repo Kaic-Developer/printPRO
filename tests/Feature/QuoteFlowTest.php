@@ -448,4 +448,50 @@ class QuoteFlowTest extends TestCase
         $this->postJson('/quotes', ['items' => [$unboundMenu]])
             ->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
     }
+
+    public function test_carbonless_stock_and_sheet_print_are_calculated_from_sheets_and_copies(): void
+    {
+        $user = $this->owner();
+        $this->actingAs($user)->post('/quotes', ['items' => [[
+            'preset_code' => 'product-carbonless-pads',
+            'quantity' => '3',
+            'answers' => ['quantity' => '3', 'copies' => '2', 'sheets_per_pad' => '40', 'sequential_numbering' => true],
+            'components' => array_map(fn (string $code, string $quantity): array => [
+                'code' => $code,
+                'selected' => true,
+                'quantity' => $quantity,
+            ], ['material-carbonless-2-part', 'process-sheet-print', 'process-sequential-numbering'], ['99', '99', '7']),
+        ]]])->assertRedirect();
+
+        $item = QuoteVersion::query()->firstOrFail()->items()->firstOrFail();
+        foreach (['material-carbonless-2-part', 'process-sheet-print'] as $code) {
+            $component = $item->components()->where('preset_code', $code)->firstOrFail();
+            $this->assertSame(80_000, $component->quantity_per_unit_milli);
+            $this->assertSame(240_000, $component->quantity_milli);
+            $this->assertSame('wizard', $component->quantity_source);
+        }
+        $numbering = $item->components()->where('preset_code', 'process-sequential-numbering')->firstOrFail();
+        $this->assertSame(7_000, $numbering->quantity_per_unit_milli);
+        $this->assertSame(21_000, $numbering->quantity_milli);
+        $this->assertSame('manual', $numbering->quantity_source);
+
+        $wrongStock = [
+            'preset_code' => 'product-carbonless-pads',
+            'quantity' => '1',
+            'answers' => ['quantity' => '1', 'copies' => '3', 'sheets_per_pad' => '40', 'sequential_numbering' => false],
+            'components' => [
+                ['code' => 'material-carbonless-2-part', 'selected' => true, 'quantity' => '1'],
+                ['code' => 'process-sheet-print', 'selected' => true, 'quantity' => '1'],
+            ],
+        ];
+        $this->postJson('/quotes', ['items' => [$wrongStock]])
+            ->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
+
+        $numberingWithoutRequest = $wrongStock;
+        $numberingWithoutRequest['answers']['copies'] = '2';
+        $numberingWithoutRequest['components'][0]['code'] = 'material-carbonless-2-part';
+        $numberingWithoutRequest['components'][] = ['code' => 'process-sequential-numbering', 'selected' => true, 'quantity' => '1'];
+        $this->postJson('/quotes', ['items' => [$numberingWithoutRequest]])
+            ->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
+    }
 }

@@ -324,6 +324,25 @@ class BuildQuoteVersion
             ]];
         }
 
+        if ($product->code === 'product-carbonless-pads') {
+            // Cada via de cada formulario consome uma folha autocopiativa e passa pela impressao.
+            $copies = (int) ($answers['copies'] ?? 0);
+            $sheetsPerPad = (int) ($answers['sheets_per_pad'] ?? 0);
+            $sheetsPerPadMilli = $copies * $sheetsPerPad * 1000;
+            $materialCode = match ($copies) {
+                2 => 'material-carbonless-2-part',
+                3 => 'material-carbonless-3-part',
+                default => null,
+            };
+            if ($materialCode !== null && $sheetsPerPad > 0) {
+                $totalSheetsMilli = $this->pricing->multiplyMilli($sheetsPerPadMilli, $lineQuantityMilli);
+                return [
+                    $materialCode => ['quantity_per_unit_milli' => $sheetsPerPadMilli, 'quantity_milli' => $totalSheetsMilli],
+                    'process-sheet-print' => ['quantity_per_unit_milli' => $sheetsPerPadMilli, 'quantity_milli' => $totalSheetsMilli],
+                ];
+            }
+        }
+
         if ($product->code === 'product-roll-up') {
             // A área da impressão usa as dimensões acabadas; o nesting calcula separadamente a sobra da bobina.
             $width = $this->millimeterInteger($answers['width_mm'] ?? null);
