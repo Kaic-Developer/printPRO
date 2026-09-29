@@ -139,3 +139,5 @@ php artisan test
 Não use `migrate:fresh` no banco local. Testes usam SQLite em memória.
 
 Para rotulos em bobina ou cartela, a ficha calcula a area de impressao pelas dimensoes acabadas e pela tiragem, sem incluir os espacamentos e as sobras do nesting. O corte e calculado como uma unidade por rotulo. A estimativa do nesting continua calculando separadamente o consumo de estoque e sua perda; os custos unitarios devem ser configurados pela grafica.
+
+Em agendas/cadernos e cardapios, a encadernacao selecionada no wizard recebe automaticamente uma unidade por exemplar acabado. A quantidade e calculada pela tiragem e o custo unitario continua dependendo da configuracao da grafica.

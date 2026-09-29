@@ -310,6 +310,20 @@ class BuildQuoteVersion
             ]];
         }
 
+        if (in_array($product->code, ['product-agenda-notebook', 'product-menu'], true)) {
+            // Cada exemplar acabado recebe uma encadernacao; o tipo e escolhido no wizard.
+            $bindingCode = match ($answers['binding'] ?? null) {
+                'spiral' => 'finish-binding-spiral',
+                'wire-o' => 'finish-binding-wire-o',
+                'hardcover' => 'finish-binding-hardcover',
+                default => null,
+            };
+            return $bindingCode === null ? [] : [$bindingCode => [
+                'quantity_per_unit_milli' => 1000,
+                'quantity_milli' => $lineQuantityMilli,
+            ]];
+        }
+
         if ($product->code === 'product-roll-up') {
             // A área da impressão usa as dimensões acabadas; o nesting calcula separadamente a sobra da bobina.
             $width = $this->millimeterInteger($answers['width_mm'] ?? null);

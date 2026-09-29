@@ -46,6 +46,7 @@ final class QuoteComponentRequirements
         $choiceGroup = match ($product->code) {
             'product-mug' => ['material-gift-mug-ceramic', 'material-gift-mug-polymer', 'process-sublimation', 'process-gift-printing'],
             'product-labels-roll-sheet' => ['material-label-roll-stock', 'material-label-sheet-stock'],
+            'product-agenda-notebook', 'product-menu' => ['finish-binding-spiral', 'finish-binding-wire-o', 'finish-binding-hardcover'],
             'product-roll-up' => ['material-roll-up-stand'],
             'product-frontlight-banner' => ['material-frontlight-440g', 'material-frontlight-500g', 'material-backlight', 'material-mesh', 'material-sublimation-fabric', 'finish-banner-rods-cord'],
             'product-printed-adhesive' => ['material-vinyl-monomeric', 'material-vinyl-polymeric', 'material-vinyl-perforated', 'material-vinyl-frosted', 'material-vinyl-static-cling', 'material-vinyl-gloss-lamination', 'material-vinyl-matte-lamination', 'material-vinyl-scratch-lamination', 'finish-vinyl-lamination', 'process-plotter-cut'],
@@ -90,6 +91,14 @@ final class QuoteComponentRequirements
             )),
             'product-flyer', 'product-folder-print', 'product-envelopes', 'product-letterhead' => [$this->printedStock($answers, [])[0]],
             'product-carbonless-pads' => [$this->carbonlessPads($answers)[0]],
+            'product-agenda-notebook' => array_values(array_intersect(
+                ['finish-binding-spiral', 'finish-binding-wire-o', 'finish-binding-hardcover'],
+                $this->boundPrint($answers, true),
+            )),
+            'product-menu' => array_values(array_intersect(
+                ['finish-binding-spiral', 'finish-binding-wire-o', 'finish-binding-hardcover'],
+                $this->menu($answers),
+            )),
             'uniform-polo' => $this->polo($answers),
             'product-basic-tshirt' => $this->basicTshirt($answers),
             'product-dtf-dtg-print' => $this->dtfDtgPrint($answers),

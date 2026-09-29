@@ -399,4 +399,53 @@ class QuoteFlowTest extends TestCase
         $this->actingAs($first)->put('/quote-settings', ['items' => [$material->code => ['is_enabled' => '0', 'unit_cost' => '']]])->assertRedirect();
         $this->assertDatabaseHas('organization_quote_presets', ['organization_id' => $first->organization_id, 'quote_preset_id' => $material->id, 'unit_cost_cents' => null]);
     }
+
+    public function test_selected_agenda_and_menu_bindings_are_calculated_per_finished_copy(): void
+    {
+        $user = $this->owner();
+        $lines = [
+            [
+                'preset_code' => 'product-agenda-notebook',
+                'quantity' => '3',
+                'answers' => ['quantity' => '3', 'format' => 'A5', 'pages' => '80', 'binding' => 'hardcover'],
+                'components' => ['material-offset-90g', 'process-sheet-print', 'finish-binding-hardcover'],
+            ],
+            [
+                'preset_code' => 'product-menu',
+                'quantity' => '5',
+                'answers' => ['quantity' => '5', 'format' => 'A4', 'pages' => '12', 'laminated' => false, 'binding' => 'wire-o'],
+                'components' => ['material-couche-300g', 'process-sheet-print', 'finish-binding-wire-o'],
+            ],
+        ];
+        $items = array_map(fn (array $line): array => [
+            'preset_code' => $line['preset_code'],
+            'quantity' => $line['quantity'],
+            'answers' => $line['answers'],
+            'components' => array_map(fn (string $code): array => ['code' => $code, 'selected' => true, 'quantity' => '99'], $line['components']),
+        ], $lines);
+
+        $this->actingAs($user)->post('/quotes', ['items' => $items])->assertRedirect();
+        $version = QuoteVersion::query()->firstOrFail();
+        foreach ([
+            ['product-agenda-notebook', 'finish-binding-hardcover', 3_000],
+            ['product-menu', 'finish-binding-wire-o', 5_000],
+        ] as [$productCode, $bindingCode, $expectedQuantity]) {
+            $component = $version->items()->where('preset_code', $productCode)->firstOrFail()
+                ->components()->where('preset_code', $bindingCode)->firstOrFail();
+            $this->assertSame(1000, $component->quantity_per_unit_milli);
+            $this->assertSame($expectedQuantity, $component->quantity_milli);
+            $this->assertSame('wizard', $component->quantity_source);
+        }
+
+        $invalidAgenda = $items[0];
+        $invalidAgenda['components'][] = ['code' => 'finish-binding-spiral', 'selected' => true, 'quantity' => '99'];
+        $this->postJson('/quotes', ['items' => [$invalidAgenda]])
+            ->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
+
+        $unboundMenu = $items[1];
+        $unboundMenu['answers']['binding'] = 'none';
+        $unboundMenu['components'][2]['code'] = 'finish-binding-hardcover';
+        $this->postJson('/quotes', ['items' => [$unboundMenu]])
+            ->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
+    }
 }

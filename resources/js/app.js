@@ -212,6 +212,24 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         });
     };
 
+    // Mantem somente a encadernacao escolhida na ficha e evita opcoes antigas ao trocar o select.
+    const syncBindingComponents = (panel) => {
+        if (!['product-agenda-notebook', 'product-menu'].includes(panel.dataset.presetPanel)) return;
+        const bindingCode = ({
+            spiral: 'finish-binding-spiral',
+            'wire-o': 'finish-binding-wire-o',
+            hardcover: 'finish-binding-hardcover',
+        })[panel.querySelector('[data-wizard-field="binding"] select')?.value];
+        ['finish-binding-spiral', 'finish-binding-wire-o', 'finish-binding-hardcover'].forEach((code) => {
+            const row = panel.querySelector(`[data-component-code="${code}"]`);
+            if (!row) return;
+            const selected = code === bindingCode;
+            row.hidden = !selected;
+            const checkbox = row.querySelector('[name$="[selected]"]');
+            if (checkbox) checkbox.checked = selected;
+        });
+    };
+
     const syncTextilePrintDimensions = (panel) => {
         if (panel.dataset.presetPanel !== 'product-basic-tshirt') return;
         const selectedSize = panel.querySelector('[data-wizard-field="print_size"] select')?.value;
@@ -280,9 +298,17 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         const labelProcessCodes = productCode === 'product-labels-roll-sheet'
             ? ['process-label-printing', 'process-label-die-cut']
             : [];
+        const bindingCodes = {
+            spiral: 'finish-binding-spiral',
+            'wire-o': 'finish-binding-wire-o',
+            hardcover: 'finish-binding-hardcover',
+        };
+        const bindingProcessCodes = ['product-agenda-notebook', 'product-menu'].includes(productCode)
+            ? [bindingCodes[panel.querySelector('[data-wizard-field="binding"] select')?.value]].filter(Boolean)
+            : [];
         const dieCutNotRequested = productCode === 'product-presentation-folder'
             && panel.querySelector('[data-wizard-field="die_cut"] select')?.value === '0';
-        const managedCodes = [...new Set([...calculatedCodes, ...nestingProcessCodes, ...foldProcessCodes, ...labelProcessCodes])];
+        const managedCodes = [...new Set([...calculatedCodes, ...nestingProcessCodes, ...foldProcessCodes, ...labelProcessCodes, ...bindingProcessCodes])];
         const colors = ['silk_front_colors', 'silk_back_colors'].reduce((total, key) => total + (Number(panel.querySelector(`[data-wizard-field="${key}"] input`)?.value) || 0), 0);
         const stitches = Number(panel.querySelector('[data-wizard-field="estimated_stitches"] input')?.value) || 0;
         panel.querySelectorAll('[data-component-code]').forEach((row) => {
@@ -323,6 +349,9 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                         'process-folding': 'Calculado pelo numero de dobras multiplicado pelas unidades do pedido.',
                         'process-label-printing': 'Calculado pela area efetivamente impressa nos rotulos, sem as sobras do nesting.',
                         'process-label-die-cut': 'Calculado com um corte por rotulo produzido.',
+                        'finish-binding-spiral': 'Calculada uma encadernacao para cada exemplar acabado.',
+                        'finish-binding-wire-o': 'Calculada uma encadernacao para cada exemplar acabado.',
+                        'finish-binding-hardcover': 'Calculada uma encadernacao para cada exemplar acabado.',
                         'material-silk-screen-screen': `Calculada uma vez nesta linha: ${colors} tela(s), conforme as cores na frente e no verso.`,
                         'material-silk-screen-film': `Calculado uma vez nesta linha: ${colors} fotolito(s), conforme as cores na frente e no verso.`,
                         'material-silk-screen-ink': `Calculada por peça: ${colors} aplicação(ões) de cor × quantidade de peças.`,
@@ -542,6 +571,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 syncAdhesiveComponentChoices(panel);
                 syncBannerComponents(panel);
                 syncRollUpAndGiftComponents(panel);
+                syncBindingComponents(panel);
                 syncTextilePrintDimensions(panel);
                 updateWizardQuantityManagement(panel);
                 updateNestingMaterialOptions(panel);
@@ -602,6 +632,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         syncAdhesiveComponentChoices(panel);
         syncBannerComponents(panel);
         syncRollUpAndGiftComponents(panel);
+        syncBindingComponents(panel);
         syncTextilePrintDimensions(panel);
         updateWizardQuantityManagement(panel);
         updateNestingMaterialOptions(panel);
@@ -625,6 +656,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 syncAdhesiveComponentChoices(panel);
                 syncBannerComponents(panel);
                 syncRollUpAndGiftComponents(panel);
+                syncBindingComponents(panel);
                 syncTextilePrintDimensions(panel);
                 updateWizardQuantityManagement(panel);
                 if (event.target.matches('select')) updateComponentSuggestions(panel);
