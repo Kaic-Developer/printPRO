@@ -143,3 +143,5 @@ Para rotulos em bobina ou cartela, a ficha calcula a area de impressao pelas dim
 Em agendas/cadernos e cardapios, a encadernacao selecionada no wizard recebe automaticamente uma unidade por exemplar acabado. A quantidade e calculada pela tiragem e o custo unitario continua dependendo da configuracao da grafica.
 
 Em blocos e taloes autocopiativos, o papel da via escolhida e o processo de impressao calculam folhas por bloco × vias × tiragem. A numeracao sequencial continua com consumo manual porque a unidade de cobranca precisa ser definida pela grafica (formulario ou via fisica); nenhum valor presumido e aplicado.
+
+No cartao de visita, laminação, verniz UV e hot stamping acompanham as folhas inteiras do nesting quando ele esta ativo; cantos arredondados acompanham cada cartao, e a faca especial entra como uma preparacao por linha/arte. Sem nesting, acabamentos vendidos por folha continuam com consumo manual. Acabamentos nao marcados no wizard sao rejeitados pela validacao da ficha.

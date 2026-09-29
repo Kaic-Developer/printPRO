@@ -310,6 +310,23 @@ class BuildQuoteVersion
             ]];
         }
 
+        if ($product->code === 'print-business-card') {
+            $finishes = (array) ($answers['finishes'] ?? []);
+            $quantities = [];
+            if (in_array('rounded-corners', $finishes, true)) {
+                // Cantos arredondados sao feitos em cada cartao acabado, nao em cada folha de impressao.
+                $quantities['finish-rounded-corners'] = [
+                    'quantity_per_unit_milli' => 1000,
+                    'quantity_milli' => $lineQuantityMilli,
+                ];
+            }
+            if (filter_var($answers['special_die'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                // A faca especial e uma preparacao por arte/linha, cobrada uma vez no pedido.
+                $quantities['process-special-die'] = ['quantity_per_unit_milli' => null, 'quantity_milli' => 1000];
+            }
+            return $quantities;
+        }
+
         if (in_array($product->code, ['product-agenda-notebook', 'product-menu'], true)) {
             // Cada exemplar acabado recebe uma encadernacao; o tipo e escolhido no wizard.
             $bindingCode = match ($answers['binding'] ?? null) {
@@ -487,7 +504,10 @@ class BuildQuoteVersion
         $sheetsRequired = filter_var($nesting['sheets_required'] ?? null, FILTER_VALIDATE_INT);
         if ($sheetsRequired === false || $sheetsRequired < 1) return [];
         $totalSheetsMilli = $sheetsRequired * 1000;
-        $processCodes = ['process-sheet-print', 'process-cutting', 'process-die-cut-crease'];
+        $processCodes = [
+            'process-sheet-print', 'process-cutting', 'process-die-cut-crease',
+            'finish-card-lamination', 'finish-uv-varnish', 'finish-hot-stamping',
+        ];
         if ($product->code === 'product-presentation-folder' && ! filter_var($answers['die_cut'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
             $processCodes = array_values(array_diff($processCodes, ['process-die-cut-crease']));
         }

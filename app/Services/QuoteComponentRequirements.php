@@ -52,7 +52,7 @@ final class QuoteComponentRequirements
             'product-printed-adhesive' => ['material-vinyl-monomeric', 'material-vinyl-polymeric', 'material-vinyl-perforated', 'material-vinyl-frosted', 'material-vinyl-static-cling', 'material-vinyl-gloss-lamination', 'material-vinyl-matte-lamination', 'material-vinyl-scratch-lamination', 'finish-vinyl-lamination', 'process-plotter-cut'],
             'product-banner' => ['finish-banner-rods-cord'],
             'product-acrylic-cutout' => ['material-acrylic-sheet', 'material-acrylic-cast-2mm', 'material-acrylic-cast-3mm', 'material-acrylic-cast-4mm', 'material-acrylic-cast-5mm', 'material-acrylic-cast-6mm', 'material-acrylic-cast-8mm', 'material-acrylic-cast-10mm', 'material-ps-sheet', 'material-expanded-pvc-sheet', 'material-polycarbonate-sheet', 'process-laser-cut', 'process-router-cut', 'process-laser-router-cut', 'process-thermal-bending'],
-            'print-business-card' => ['material-cardstock-250g', 'material-cardstock-300g', 'material-card-pvc-075'],
+            'print-business-card' => ['material-cardstock-250g', 'material-cardstock-300g', 'material-card-pvc-075', 'finish-card-lamination', 'finish-uv-varnish', 'finish-hot-stamping', 'finish-rounded-corners', 'process-special-die'],
             'product-presentation-folder' => ['material-cardstock-250g', 'material-couche-300g', 'material-offset-90g', 'process-die-cut-crease'],
             'product-flyer', 'product-folder-print' => ['material-cardstock-250g', 'material-couche-300g', 'material-offset-90g'],
             'product-envelopes', 'product-letterhead' => ['material-offset-90g'],
@@ -84,7 +84,10 @@ final class QuoteComponentRequirements
             'product-printed-adhesive' => $this->adhesive($answers),
             'product-roll-up' => $this->rollUp($answers),
             'product-acrylic-cutout' => $this->acrylicCutout($answers),
-            'print-business-card' => [$this->businessCard($answers)[0]],
+            'print-business-card' => array_values(array_intersect(
+                ['material-cardstock-250g', 'material-cardstock-300g', 'material-card-pvc-075', 'finish-card-lamination', 'finish-uv-varnish', 'finish-hot-stamping', 'finish-rounded-corners', 'process-special-die'],
+                $this->businessCard($answers),
+            )),
             'product-presentation-folder' => array_values(array_intersect(
                 ['material-cardstock-250g', 'material-couche-300g', 'material-offset-90g', 'process-die-cut-crease'],
                 $this->presentationFolder($answers),

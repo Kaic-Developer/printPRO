@@ -120,6 +120,44 @@ class QuoteNestingIntegrationTest extends TestCase
         $this->assertSame(2, $order->snapshot['items'][0]['nesting']['sheets_required']);
     }
 
+    public function test_business_card_finishes_follow_sheet_or_finished_piece_quantities(): void
+    {
+        $fixture = $this->fixture();
+        [$user] = $fixture;
+        $payload = $this->payload($fixture, '221', 221, [
+            'material_type' => 'sheet', 'piece_width_mm' => '90', 'piece_length_mm' => '50',
+            'material_width_mm' => '1000', 'material_length_mm' => '1000',
+        ], [
+            'quantity' => '221', 'width_mm' => '90', 'height_mm' => '50', 'finishes' => ['matte', 'uv-varnish', 'hot-stamping', 'rounded-corners'], 'special_die' => true,
+        ]);
+        foreach (['finish-card-lamination', 'finish-uv-varnish', 'finish-hot-stamping', 'finish-rounded-corners', 'process-special-die'] as $code) {
+            $payload['items'][0]['components'][] = ['code' => $code, 'selected' => true, 'quantity' => '99'];
+        }
+
+        $this->actingAs($user)->post('/quotes', $payload)->assertRedirect();
+        $item = QuoteVersion::query()->firstOrFail()->items()->firstOrFail();
+        foreach (['finish-card-lamination', 'finish-uv-varnish', 'finish-hot-stamping'] as $code) {
+            $component = $item->components()->where('preset_code', $code)->firstOrFail();
+            $this->assertSame(2_000, $component->quantity_milli);
+            $this->assertSame('wizard', $component->quantity_source);
+        }
+        $rounded = $item->components()->where('preset_code', 'finish-rounded-corners')->firstOrFail();
+        $this->assertSame(221_000, $rounded->quantity_milli);
+        $this->assertSame('wizard', $rounded->quantity_source);
+        $specialDie = $item->components()->where('preset_code', 'process-special-die')->firstOrFail();
+        $this->assertSame(1_000, $specialDie->quantity_milli);
+        $this->assertSame('wizard', $specialDie->quantity_source);
+        $this->assertSame(2, $item->nesting['sheets_required']);
+
+        $this->get('/quotes/create')->assertOk()->assertSee('data-component-code="process-special-die"', false);
+
+        $unexpectedFinish = $payload['items'][0];
+        $unexpectedFinish['answers']['finishes'] = [];
+        $unexpectedFinish['answers']['special_die'] = false;
+        $this->postJson('/quotes', ['items' => [$unexpectedFinish]])
+            ->assertUnprocessable()->assertJsonValidationErrors('items.0.components');
+    }
+
     public function test_roll_consumption_uses_exact_millimeters_as_milli_meters_and_area_rounds_up(): void
     {
         $fixture = $this->fixture('product-frontlight-banner', 'm');

@@ -246,6 +246,38 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         });
     };
 
+    // Sincroniza papel, acabamentos e faca especial do cartao com as respostas do wizard.
+    const syncBusinessCardComponents = (panel) => {
+        if (panel.dataset.presetPanel !== 'print-business-card') return;
+        const stockCode = ({
+            'couche-250g': 'material-cardstock-250g',
+            'couche-300g': 'material-cardstock-300g',
+            'pvc-075': 'material-card-pvc-075',
+        })[panel.querySelector('[data-wizard-field="stock"] select')?.value];
+        const finishes = [...(panel.querySelector('[data-wizard-field="finishes"] select')?.selectedOptions ?? [])]
+            .map((option) => option.value);
+        const selectedCodes = new Set([
+            stockCode,
+            'process-sheet-print',
+            ...(finishes.some((finish) => ['matte', 'soft-touch'].includes(finish)) ? ['finish-card-lamination'] : []),
+            ...(finishes.includes('uv-varnish') ? ['finish-uv-varnish'] : []),
+            ...(finishes.includes('hot-stamping') ? ['finish-hot-stamping'] : []),
+            ...(finishes.includes('rounded-corners') ? ['finish-rounded-corners'] : []),
+            ...(panel.querySelector('[data-wizard-field="special_die"] select')?.value === '1' ? ['process-special-die'] : []),
+        ].filter(Boolean));
+        const controlledCodes = [
+            'material-cardstock-250g', 'material-cardstock-300g', 'material-card-pvc-075', 'process-sheet-print',
+            'finish-card-lamination', 'finish-uv-varnish', 'finish-hot-stamping', 'finish-rounded-corners', 'process-special-die',
+        ];
+        panel.querySelectorAll('[data-component-code]').forEach((row) => {
+            if (!controlledCodes.includes(row.dataset.componentCode)) return;
+            const selected = selectedCodes.has(row.dataset.componentCode);
+            row.hidden = !selected;
+            const checkbox = row.querySelector('[name$="[selected]"]');
+            if (checkbox) checkbox.checked = selected;
+        });
+    };
+
     const syncTextilePrintDimensions = (panel) => {
         if (panel.dataset.presetPanel !== 'product-basic-tshirt') return;
         const selectedSize = panel.querySelector('[data-wizard-field="print_size"] select')?.value;
@@ -285,6 +317,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
             : productCode === 'product-printed-adhesive'
                 ? ['process-large-format-print', 'process-adhesive-application', ...(laminationMaterial ? ['finish-vinyl-lamination', laminationMaterial] : [])]
                 : [];
+        const cardFinishes = [...(panel.querySelector('[data-wizard-field="finishes"] select')?.selectedOptions ?? [])].map((option) => option.value);
         const calculatedCodes = productCode === 'product-dtf-dtg-print'
             ? ({ dtf: ['process-dtf-print-size', 'material-textile-dtf-transfer'], dtg: ['process-dtg-print-size'] })[panel.querySelector('[data-wizard-field="technique"] select')?.value] ?? []
             : productCode === 'product-basic-tshirt'
@@ -308,6 +341,10 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 ...(productCode === 'product-presentation-folder' && panel.querySelector('[data-wizard-field="die_cut"] select')?.value === '1'
                     ? ['process-die-cut-crease']
                     : []),
+                ...(productCode === 'print-business-card' && cardFinishes.some((finish) => ['matte', 'soft-touch'].includes(finish)) ? ['finish-card-lamination'] : []),
+                ...(productCode === 'print-business-card' && cardFinishes.includes('uv-varnish') ? ['finish-uv-varnish'] : []),
+                ...(productCode === 'print-business-card' && cardFinishes.includes('hot-stamping') ? ['finish-hot-stamping'] : []),
+                ...(productCode === 'product-presentation-folder' && panel.querySelector('[data-wizard-field="lamination"] select')?.value === '1' ? ['finish-card-lamination'] : []),
             ]
             : [];
         const foldProcessCodes = productCode === 'product-folder-print' ? ['process-folding'] : [];
@@ -326,9 +363,12 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         const carbonlessCodes = productCode === 'product-carbonless-pads'
             ? [({ '2': 'material-carbonless-2-part', '3': 'material-carbonless-3-part' })[copies], 'process-sheet-print'].filter(Boolean)
             : [];
+        const cardCalculatedCodes = productCode === 'print-business-card'
+            ? [...(cardFinishes.includes('rounded-corners') ? ['finish-rounded-corners'] : []), ...(panel.querySelector('[data-wizard-field="special_die"] select')?.value === '1' ? ['process-special-die'] : [])]
+            : [];
         const dieCutNotRequested = productCode === 'product-presentation-folder'
             && panel.querySelector('[data-wizard-field="die_cut"] select')?.value === '0';
-        const managedCodes = [...new Set([...calculatedCodes, ...nestingProcessCodes, ...foldProcessCodes, ...labelProcessCodes, ...bindingProcessCodes, ...carbonlessCodes])];
+        const managedCodes = [...new Set([...calculatedCodes, ...nestingProcessCodes, ...foldProcessCodes, ...labelProcessCodes, ...bindingProcessCodes, ...carbonlessCodes, ...cardCalculatedCodes])];
         const colors = ['silk_front_colors', 'silk_back_colors'].reduce((total, key) => total + (Number(panel.querySelector(`[data-wizard-field="${key}"] input`)?.value) || 0), 0);
         const stitches = Number(panel.querySelector('[data-wizard-field="estimated_stitches"] input')?.value) || 0;
         panel.querySelectorAll('[data-component-code]').forEach((row) => {
@@ -374,6 +414,8 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                         'finish-binding-hardcover': 'Calculada uma encadernacao para cada exemplar acabado.',
                         'material-carbonless-2-part': 'Calculado pelas folhas por bloco, vias selecionadas e quantidade do pedido.',
                         'material-carbonless-3-part': 'Calculado pelas folhas por bloco, vias selecionadas e quantidade do pedido.',
+                        'finish-rounded-corners': 'Calculado por cartao acabado.',
+                        'process-special-die': 'Uma preparacao de faca especial por linha/arte.',
                         'material-silk-screen-screen': `Calculada uma vez nesta linha: ${colors} tela(s), conforme as cores na frente e no verso.`,
                         'material-silk-screen-film': `Calculado uma vez nesta linha: ${colors} fotolito(s), conforme as cores na frente e no verso.`,
                         'material-silk-screen-ink': `Calculada por peça: ${colors} aplicação(ões) de cor × quantidade de peças.`,
@@ -595,6 +637,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 syncRollUpAndGiftComponents(panel);
                 syncBindingComponents(panel);
                 syncCarbonlessComponents(panel);
+                syncBusinessCardComponents(panel);
                 syncTextilePrintDimensions(panel);
                 updateWizardQuantityManagement(panel);
                 updateNestingMaterialOptions(panel);
@@ -657,6 +700,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
         syncRollUpAndGiftComponents(panel);
         syncBindingComponents(panel);
         syncCarbonlessComponents(panel);
+        syncBusinessCardComponents(panel);
         syncTextilePrintDimensions(panel);
         updateWizardQuantityManagement(panel);
         updateNestingMaterialOptions(panel);
@@ -682,6 +726,7 @@ if (quoteLines && quoteLineList && quoteLineTemplate) {
                 syncRollUpAndGiftComponents(panel);
                 syncBindingComponents(panel);
                 syncCarbonlessComponents(panel);
+                syncBusinessCardComponents(panel);
                 syncTextilePrintDimensions(panel);
                 updateWizardQuantityManagement(panel);
                 if (event.target.matches('select')) updateComponentSuggestions(panel);
